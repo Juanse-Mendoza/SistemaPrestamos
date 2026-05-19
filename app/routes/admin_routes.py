@@ -33,6 +33,22 @@ def api_buscar_barcode(codigo: str, usuario: dict = Depends(requiere_admin)):
     return JSONResponse({"existe": False})
 
 
+@router.get("/api/buscar-estudiante/{documento}")
+def api_buscar_estudiante(documento: str, usuario: dict = Depends(requiere_admin)):
+    """Busca un estudiante activo por número de documento (código de barras de la cédula)."""
+    from app.database.connection import ejecutar_query
+    rows = ejecutar_query(
+        "SELECT nombre, apellido, correo FROM usuarios WHERE numero_documento = %s AND activo = TRUE",
+        (documento,)
+    )
+    if rows:
+        u = rows[0]
+        return JSONResponse({"encontrado": True,
+                             "nombre": f"{u['nombre']} {u['apellido']}",
+                             "correo": u["correo"]})
+    return JSONResponse({"encontrado": False})
+
+
 @router.get("/api/articulos-disponibles")
 def api_articulos_disponibles(usuario: dict = Depends(requiere_admin)):
     arts = articulo_service.listar_articulos(solo_disponibles=True)
@@ -257,6 +273,7 @@ def multas(request: Request, usuario: dict = Depends(requiere_admin),
         SELECT
             p.id AS prestamo_id,
             p.codigo_prestamo,
+            p.estado AS estado_prestamo,
             u.nombre || ' ' || u.apellido AS usuario_nombre,
             u.correo AS usuario_correo,
             u.numero_documento,
@@ -274,19 +291,20 @@ def multas(request: Request, usuario: dict = Depends(requiere_admin),
           AND (p.multa_pagada = FALSE OR p.multa_pagada IS NULL)
         ORDER BY p.fecha_devolucion_esperada ASC
     """)
-    # Calcular montos en Python para mayor flexibilidad
     multas_lista = []
     for m in multas_data:
-        horas = max(0, round(float(m.get("multa_horas_raw") or 0), 1))
-        tasa  = float(m.get("multa_tasa_hora") or 1000)
-        monto = round(horas * tasa, 0)
+        horas  = max(0, round(float(m.get("multa_horas_raw") or 0), 1))
+        tasa   = float(m.get("multa_tasa_hora") or 1000)
+        monto  = round(horas * tasa, 0)
         pagado = float(m.get("multa_pagado") or 0)
         saldo  = max(0, monto - pagado)
         multas_lista.append({
             **m,
-            "multa_horas": horas,
-            "multa_monto": monto,
-            "multa_saldo": saldo,
+            "aun_activo":              m.get("estado_prestamo") == "vencido",
+            "multa_horas":             horas,
+            "multa_monto":             monto,
+            "multa_pagado":            pagado,
+            "multa_saldo":             saldo,
             "multa_tasa_hora_formato": f"${tasa:,.0f}",
             "multa_monto_formato":     f"${monto:,.0f}",
             "multa_pagado_formato":    f"${pagado:,.0f}",
@@ -304,24 +322,40 @@ def multas(request: Request, usuario: dict = Depends(requiere_admin),
     })
 
 
-@router.post("/multas/{prestamo_id}/pago")
+@router.post("/multas/{prestamo_id}/pagar")
 def registrar_pago_multa(prestamo_id: int, usuario: dict = Depends(requiere_admin),
-                          monto_pago: float = Form(...),
+                          monto: float = Form(...),
                           observaciones: str = Form("")):
-    from app.database.connection import get_conn
+    from app.database.connection import get_conn, ejecutar_query
+    rows = ejecutar_query("""
+        SELECT p.multa_monto_pagado,
+               p.fecha_devolucion_esperada,
+               COALESCE(a.multa_por_hora_cop, 1000) AS tasa
+        FROM prestamos p
+        JOIN articulos a ON a.id = p.articulo_id
+        WHERE p.id = %s
+    """, (prestamo_id,))
+    if not rows:
+        return RedirectResponse("/admin/multas?msg=Prestamo+no+encontrado&tipo=error", status_code=302)
+    row = rows[0]
+    ya_pagado   = float(row.get("multa_monto_pagado") or 0)
+    horas       = max(0, (datetime.now() - row["fecha_devolucion_esperada"]).total_seconds() / 3600)
+    monto_total = round(horas * float(row.get("tasa") or 1000), 0)
+    nuevo_pagado = ya_pagado + monto
+    es_saldado   = nuevo_pagado >= monto_total
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("""
                 UPDATE prestamos
-                SET multa_monto_pagado = COALESCE(multa_monto_pagado, 0) + %s,
-                    multa_fecha_pago   = NOW(),
+                SET multa_monto_pagado    = %s,
+                    multa_fecha_pago      = NOW(),
                     multa_admin_recibe_id = %s,
-                    multa_observaciones = %s,
-                    multa_pagada = CASE WHEN COALESCE(multa_monto_pagado,0) + %s >= 0 THEN TRUE ELSE FALSE END
+                    multa_observaciones   = %s,
+                    multa_pagada          = %s
                 WHERE id = %s
-            """, (monto_pago, int(usuario["sub"]), observaciones or None, monto_pago, prestamo_id))
-    return RedirectResponse(f"/admin/multas?msg=Pago+registrado+correctamente&tipo=success",
-                            status_code=302)
+            """, (nuevo_pagado, int(usuario["sub"]), observaciones or None, es_saldado, prestamo_id))
+    msg = "Multa+saldada+completamente" if es_saldado else "Abono+registrado+correctamente"
+    return RedirectResponse(f"/admin/multas?msg={msg}&tipo=success", status_code=302)
 
 
 # ─── Reportes PDF ─────────────────────────────────────────────────────────────

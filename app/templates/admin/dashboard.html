@@ -104,31 +104,62 @@
 
 <!-- Modal nuevo préstamo -->
 <div class="modal-backdrop" id="modal-nuevo-prestamo">
-  <div class="modal">
+  <div class="modal" style="max-width:560px">
     <h3 class="modal-title">Registrar nuevo préstamo</h3>
-    <form method="post" action="/admin/prestamos/nuevo">
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">Correo del estudiante</label>
-          <input class="form-control" name="usuario_correo" type="email"
-                 placeholder="correo@academia.umb.edu.co" required/>
+    <form method="post" action="/admin/prestamos/nuevo" id="form-dash-prestamo"
+          onsubmit="return validarFormDash()">
+
+      <!-- Estudiante por barcode/documento -->
+      <div class="form-group" style="margin-bottom:10px">
+        <label class="form-label">Documento / cédula del estudiante</label>
+        <div style="display:flex;gap:6px">
+          <input class="form-control" id="db-doc" autocomplete="off"
+                 style="font-family:monospace;letter-spacing:1px"
+                 placeholder="Escanee cédula o escríbala aquí..."/>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="dbBuscarEst()">🔍</button>
         </div>
-        <div class="form-group">
-          <label class="form-label">Artículo</label>
-          <select class="form-control" name="articulo_id" required>
-            <option value="">Seleccionar artículo...</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Fecha de devolución esperada</label>
-          <input class="form-control" type="datetime-local" name="fecha_devolucion" required/>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Observaciones</label>
-          <textarea class="form-control" name="observaciones" rows="2"
-                    placeholder="Opcional..."></textarea>
+        <div id="db-est-info" style="display:none;margin-top:6px;padding:8px 10px;
+             background:rgba(59,125,221,.08);border:1px solid rgba(59,125,221,.3);
+             border-radius:6px;font-size:13px">
+          <span style="font-weight:600" id="db-est-nombre"></span>
+          <span class="text-muted" id="db-est-correo" style="margin-left:8px"></span>
         </div>
       </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Correo del estudiante <span style="color:var(--danger)">*</span></label>
+        <input class="form-control" id="db-correo" name="usuario_correo" type="email"
+               placeholder="Se llena automático o escríbalo directo" required/>
+      </div>
+
+      <!-- Artículo por barcode -->
+      <div class="form-group" style="margin-bottom:6px">
+        <label class="form-label">Código de barras del artículo</label>
+        <div style="display:flex;gap:6px">
+          <input class="form-control" id="db-barcode" autocomplete="off"
+                 style="font-family:monospace;letter-spacing:1px"
+                 placeholder="Escanee el artículo con el lector USB..."/>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="dbBuscarArt()">🔍</button>
+        </div>
+        <div id="db-art-info" style="display:none;margin-top:4px;font-size:12px"></div>
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Artículo <span style="color:var(--danger)">*</span></label>
+        <select class="form-control" id="db-articulo-sel" name="articulo_id"
+                title="Seleccione el artículo a prestar" required>
+          <option value="">Seleccionar artículo...</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Fecha de devolución esperada <span style="color:var(--danger)">*</span></label>
+        <input class="form-control" type="datetime-local" name="fecha_devolucion" id="db-fecha" required/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Observaciones</label>
+        <textarea class="form-control" name="observaciones" rows="2"
+                  title="Observaciones del préstamo" placeholder="Opcional..."></textarea>
+      </div>
+
       <div class="modal-footer">
         <button type="button" class="btn btn-ghost" onclick="closeModal('modal-nuevo-prestamo')">Cancelar</button>
         <button type="submit" class="btn btn-primary">Registrar préstamo</button>
@@ -140,17 +171,97 @@
 {% block scripts %}
 <script>
 // Cargar artículos disponibles en el select del modal
-fetch('/admin/api/articulos-disponibles').then(r=>r.json()).then(data=>{
-  const sel = document.querySelector('[name="articulo_id"]');
+fetch('/admin/api/articulos-disponibles').then(r => r.json()).then(data => {
+  const sel = document.getElementById('db-articulo-sel');
   data.forEach(a => {
     const opt = document.createElement('option');
     opt.value = a.articulo_id;
     opt.textContent = `${a.articulo} (disp: ${a.stock_disponible})`;
     sel.appendChild(opt);
   });
-}).catch(()=>{});
-// Fecha mínima ahora
-const fi = document.querySelector('[name="fecha_devolucion"]');
-if(fi){ fi.min = new Date().toISOString().slice(0,16); }
+}).catch(() => {});
+
+// Fecha mínima = ahora
+const fi = document.getElementById('db-fecha');
+if (fi) fi.min = new Date().toISOString().slice(0, 16);
+
+// ── Búsqueda de estudiante por documento ─────────────────────────────────────
+let _dbDocTimer;
+document.getElementById('db-doc').addEventListener('input', () => {
+  clearTimeout(_dbDocTimer);
+  _dbDocTimer = setTimeout(() => {
+    const v = document.getElementById('db-doc').value.trim();
+    if (v.length >= 4) dbBuscarEst();
+  }, 150);
+});
+
+function dbBuscarEst() {
+  const doc = document.getElementById('db-doc').value.trim();
+  if (!doc) return;
+  fetch(`/admin/api/buscar-estudiante/${encodeURIComponent(doc)}`)
+    .then(r => r.json())
+    .then(d => {
+      const info = document.getElementById('db-est-info');
+      if (d.encontrado) {
+        document.getElementById('db-est-nombre').textContent = d.nombre;
+        document.getElementById('db-est-correo').textContent = d.correo;
+        document.getElementById('db-correo').value = d.correo;
+        info.style.display = 'block';
+      } else {
+        info.style.display = 'none';
+      }
+    }).catch(() => {});
+}
+
+// ── Búsqueda de artículo por código de barras ────────────────────────────────
+let _dbBarcodeTimer;
+document.getElementById('db-barcode').addEventListener('input', () => {
+  clearTimeout(_dbBarcodeTimer);
+  _dbBarcodeTimer = setTimeout(() => {
+    const v = document.getElementById('db-barcode').value.trim();
+    if (v.length >= 3) dbBuscarArt();
+  }, 150);
+});
+
+function dbBuscarArt() {
+  const cod = document.getElementById('db-barcode').value.trim();
+  if (!cod) return;
+  fetch(`/admin/api/buscar-barcode/${encodeURIComponent(cod)}`)
+    .then(r => r.json())
+    .then(d => {
+      const sel    = document.getElementById('db-articulo-sel');
+      const infoEl = document.getElementById('db-art-info');
+      if (d.existe) {
+        sel.value = d.articulo.articulo_id;
+        const sinStock = d.articulo.stock_disponible <= 0;
+        infoEl.textContent   = sinStock
+          ? `⚠ ${d.articulo.articulo} — sin stock disponible`
+          : `✓ ${d.articulo.articulo} (disponible: ${d.articulo.stock_disponible})`;
+        infoEl.style.color   = sinStock ? 'var(--danger)' : '#16a34a';
+        infoEl.style.display = 'block';
+      } else {
+        infoEl.textContent   = `⚠ Código "${cod}" no registrado`;
+        infoEl.style.color   = 'var(--danger)';
+        infoEl.style.display = 'block';
+        sel.value = '';
+      }
+    }).catch(() => {});
+}
+
+function validarFormDash() {
+  const correo = document.getElementById('db-correo').value.trim();
+  const art    = document.getElementById('db-articulo-sel').value;
+  if (!correo) {
+    alert('Ingrese el correo del estudiante o búsquelo por documento.');
+    document.getElementById('db-doc').focus();
+    return false;
+  }
+  if (!art) {
+    alert('Seleccione un artículo o escanee su código de barras.');
+    document.getElementById('db-barcode').focus();
+    return false;
+  }
+  return true;
+}
 </script>
 {% endblock %}
