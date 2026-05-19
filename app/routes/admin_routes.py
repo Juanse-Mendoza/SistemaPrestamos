@@ -35,11 +35,13 @@ def api_buscar_barcode(codigo: str, usuario: dict = Depends(requiere_admin)):
 
 @router.get("/api/buscar-estudiante/{documento}")
 def api_buscar_estudiante(documento: str, usuario: dict = Depends(requiere_admin)):
-    """Busca un estudiante activo por número de documento (código de barras de la cédula)."""
+    """Busca un estudiante activo por numero_documento O codigo_barras del carnet."""
     from app.database.connection import ejecutar_query
     rows = ejecutar_query(
-        "SELECT nombre, apellido, correo FROM usuarios WHERE numero_documento = %s AND activo = TRUE",
-        (documento,)
+        """SELECT nombre, apellido, correo FROM usuarios
+           WHERE (numero_documento = %s OR codigo_barras = %s) AND activo = TRUE
+           LIMIT 1""",
+        (documento, documento)
     )
     if rows:
         u = rows[0]
@@ -47,6 +49,18 @@ def api_buscar_estudiante(documento: str, usuario: dict = Depends(requiere_admin
                              "nombre": f"{u['nombre']} {u['apellido']}",
                              "correo": u["correo"]})
     return JSONResponse({"encontrado": False})
+
+
+@router.get("/api/generar-codigo-usuario")
+def api_generar_codigo_usuario(usuario: dict = Depends(requiere_admin)):
+    """Genera un código de barras único para un carnet de usuario."""
+    import uuid
+    from app.database.connection import ejecutar_query
+    for _ in range(10):
+        code = f"USR-{uuid.uuid4().hex[:8].upper()}"
+        if not ejecutar_query("SELECT 1 FROM usuarios WHERE codigo_barras=%s", (code,)):
+            return JSONResponse({"codigo": code})
+    return JSONResponse({"codigo": None})
 
 
 @router.get("/api/articulos-disponibles")
@@ -182,9 +196,18 @@ def devolver(prestamo_id: int, usuario: dict = Depends(requiere_admin),
 @router.get("/usuarios", response_class=HTMLResponse)
 def usuarios(request: Request, usuario: dict = Depends(requiere_admin),
              msg: str = "", tipo: str = ""):
+    from app.database.connection import ejecutar_query
+    solicitudes_count = {"total": ejecutar_query(
+        "SELECT COUNT(*) AS c FROM prestamos WHERE estado='pendiente'"
+    )[0]["c"]}
+    multas_count = ejecutar_query(
+        "SELECT COUNT(*) AS c FROM prestamos WHERE estado='vencido' AND (multa_pagada=FALSE OR multa_pagada IS NULL)"
+    )[0]["c"]
     return templates.TemplateResponse(request, "admin/usuarios.html", _ctx(
         usuario,
         usuarios=prestamo_service.listar_usuarios(),
+        solicitudes_count=solicitudes_count,
+        multas_count=multas_count,
         msg=msg, tipo=tipo,
     ))
 
@@ -193,11 +216,44 @@ def usuarios(request: Request, usuario: dict = Depends(requiere_admin),
 def nuevo_usuario(usuario: dict = Depends(requiere_admin),
                   nombre: str = Form(...), apellido: str = Form(...),
                   correo: str = Form(...), documento: str = Form(""),
+                  codigo_barras: str = Form(""),
                   password: str = Form(...), rol: str = Form(...)):
     res = registrar_usuario_admin(nombre, apellido, correo.strip(), password, rol,
                                    documento.strip() or None)
+    if res["exito"] and codigo_barras.strip():
+        from app.database.connection import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE usuarios SET codigo_barras=%s WHERE id=%s",
+                            (codigo_barras.strip(), res["usuario_id"]))
     tipo = "success" if res["exito"] else "error"
     return RedirectResponse(f"/admin/usuarios?msg={res['mensaje']}&tipo={tipo}", status_code=302)
+
+
+@router.post("/usuarios/{usuario_id}/editar")
+def editar_usuario(usuario_id: int, usuario: dict = Depends(requiere_admin),
+                   nombre: str = Form(...), apellido: str = Form(...),
+                   correo: str = Form(...), documento: str = Form(""),
+                   codigo_barras: str = Form(""), password: str = Form(""),
+                   activo: str = Form("")):
+    from app.database.connection import get_conn
+    from app.auth.jwt_handler import hashear_password
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE usuarios
+                SET nombre=%s, apellido=%s, correo=LOWER(%s),
+                    numero_documento=%s, codigo_barras=%s,
+                    activo=%s, fecha_actualizacion=NOW()
+                WHERE id=%s
+            """, (nombre.strip(), apellido.strip(), correo.strip(),
+                  documento.strip() or None, codigo_barras.strip() or None,
+                  activo == "on", usuario_id))
+            if password.strip():
+                cur.execute("UPDATE usuarios SET password_hash=%s WHERE id=%s",
+                            (hashear_password(password.strip()), usuario_id))
+    return RedirectResponse("/admin/usuarios?msg=Usuario+actualizado+correctamente&tipo=success",
+                            status_code=302)
 
 
 # ─── Solicitudes ──────────────────────────────────────────────────────────────

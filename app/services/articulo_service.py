@@ -29,7 +29,7 @@ def registrar_articulo(nombre: str, descripcion: str | None, categoria_id: int |
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "CALL sp_registrar_articulo(%s,%s,%s,%s,%s,%s,%s,NULL,NULL)",
+                "CALL sp_registrar_articulo(%s,%s,%s,%s,%s,%s,%s,NULL,NULL,NULL)",
                 (nombre, descripcion, categoria_id, stock_total,
                  codigo_interno, ubicacion, codigo_barras),
             )
