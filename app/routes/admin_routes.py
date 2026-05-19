@@ -182,3 +182,180 @@ def nuevo_usuario(usuario: dict = Depends(requiere_admin),
                                    documento.strip() or None)
     tipo = "success" if res["exito"] else "error"
     return RedirectResponse(f"/admin/usuarios?msg={res['mensaje']}&tipo={tipo}", status_code=302)
+
+
+# ─── Solicitudes ──────────────────────────────────────────────────────────────
+
+@router.get("/solicitudes", response_class=HTMLResponse)
+def solicitudes(request: Request, usuario: dict = Depends(requiere_admin),
+                msg: str = "", tipo: str = ""):
+    from app.database.connection import ejecutar_query
+    pendientes = ejecutar_query("""
+        SELECT p.id AS prestamo_id, p.codigo_prestamo,
+               u.nombre || ' ' || u.apellido AS usuario_nombre,
+               u.correo AS usuario_correo,
+               a.nombre AS articulo,
+               p.fecha_prestamo, p.fecha_devolucion_esperada
+        FROM prestamos p
+        JOIN usuarios u ON u.id = p.usuario_id
+        JOIN articulos a ON a.id = p.articulo_id
+        WHERE p.estado = 'pendiente'
+        ORDER BY p.fecha_prestamo DESC
+    """)
+    disputas = ejecutar_query("""
+        SELECT d.id AS devolucion_id, p.codigo_prestamo,
+               u.nombre || ' ' || u.apellido AS usuario_nombre,
+               u.correo AS usuario_correo,
+               a.nombre AS articulo,
+               d.estado_articulo_recibido,
+               d.fecha_devolucion,
+               p.motivo_rechazo
+        FROM devoluciones d
+        JOIN prestamos p ON p.id = d.prestamo_id
+        JOIN usuarios u ON u.id = p.usuario_id
+        JOIN articulos a ON a.id = p.articulo_id
+        WHERE d.estado_articulo_recibido IN ('mantenimiento', 'baja')
+          AND p.estado = 'devuelto'
+        ORDER BY d.fecha_devolucion DESC
+        LIMIT 50
+    """)
+    multas_count = ejecutar_query("""
+        SELECT COUNT(*) AS total FROM prestamos
+        WHERE estado = 'vencido' AND (multa_pagada = FALSE OR multa_pagada IS NULL)
+    """)[0]["total"]
+    solicitudes_count = {"total": len(pendientes)}
+    return templates.TemplateResponse(request, "admin/solicitudes.html", {
+        "usuario": usuario,
+        "pendientes": pendientes,
+        "disputas": disputas,
+        "solicitudes_count": solicitudes_count,
+        "multas_count": multas_count,
+        "msg": msg, "tipo": tipo,
+    })
+
+
+@router.post("/solicitudes/{prestamo_id}/cancelar")
+def cancelar_solicitud(prestamo_id: int, usuario: dict = Depends(requiere_admin),
+                       motivo: str = Form("")):
+    from app.database.connection import get_conn
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("CALL sp_cancelar_prestamo_pendiente(%s,%s,%s,NULL)",
+                        (prestamo_id, int(usuario["sub"]), motivo or "Cancelado por administrador"))
+            row = cur.fetchone()
+    msg = row["p_mensaje"] if row else "Procesado."
+    return RedirectResponse(f"/admin/solicitudes?msg={msg}&tipo=success", status_code=302)
+
+
+# ─── Multas ───────────────────────────────────────────────────────────────────
+
+@router.get("/multas", response_class=HTMLResponse)
+def multas(request: Request, usuario: dict = Depends(requiere_admin),
+           msg: str = "", tipo: str = ""):
+    from app.database.connection import ejecutar_query
+    multas_data = ejecutar_query("""
+        SELECT
+            p.id AS prestamo_id,
+            p.codigo_prestamo,
+            u.nombre || ' ' || u.apellido AS usuario_nombre,
+            u.correo AS usuario_correo,
+            u.numero_documento,
+            a.nombre AS articulo,
+            p.fecha_devolucion_esperada,
+            COALESCE(a.multa_por_hora_cop, 1000) AS multa_tasa_hora,
+            EXTRACT(EPOCH FROM (NOW() - p.fecha_devolucion_esperada)) / 3600 AS multa_horas_raw,
+            COALESCE(p.multa_monto_pagado, 0) AS multa_pagado,
+            COALESCE(p.multa_pagada, FALSE) AS multa_pagada_bool
+        FROM prestamos p
+        JOIN usuarios u ON u.id = p.usuario_id
+        JOIN articulos a ON a.id = p.articulo_id
+        WHERE p.estado IN ('vencido', 'devuelto')
+          AND p.fecha_devolucion_esperada < NOW()
+          AND (p.multa_pagada = FALSE OR p.multa_pagada IS NULL)
+        ORDER BY p.fecha_devolucion_esperada ASC
+    """)
+    # Calcular montos en Python para mayor flexibilidad
+    multas_lista = []
+    for m in multas_data:
+        horas = max(0, round(float(m.get("multa_horas_raw") or 0), 1))
+        tasa  = float(m.get("multa_tasa_hora") or 1000)
+        monto = round(horas * tasa, 0)
+        pagado = float(m.get("multa_pagado") or 0)
+        saldo  = max(0, monto - pagado)
+        multas_lista.append({
+            **m,
+            "multa_horas": horas,
+            "multa_monto": monto,
+            "multa_saldo": saldo,
+            "multa_tasa_hora_formato": f"${tasa:,.0f}",
+            "multa_monto_formato":     f"${monto:,.0f}",
+            "multa_pagado_formato":    f"${pagado:,.0f}",
+            "multa_saldo_formato":     f"${saldo:,.0f}",
+        })
+
+    solicitudes_count = {"total": ejecutar_query(
+        "SELECT COUNT(*) AS c FROM prestamos WHERE estado='pendiente'"
+    )[0]["c"]}
+    return templates.TemplateResponse(request, "admin/multas.html", {
+        "usuario": usuario,
+        "multas": multas_lista,
+        "solicitudes_count": solicitudes_count,
+        "msg": msg, "tipo": tipo,
+    })
+
+
+@router.post("/multas/{prestamo_id}/pago")
+def registrar_pago_multa(prestamo_id: int, usuario: dict = Depends(requiere_admin),
+                          monto_pago: float = Form(...),
+                          observaciones: str = Form("")):
+    from app.database.connection import get_conn
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE prestamos
+                SET multa_monto_pagado = COALESCE(multa_monto_pagado, 0) + %s,
+                    multa_fecha_pago   = NOW(),
+                    multa_admin_recibe_id = %s,
+                    multa_observaciones = %s,
+                    multa_pagada = CASE WHEN COALESCE(multa_monto_pagado,0) + %s >= 0 THEN TRUE ELSE FALSE END
+                WHERE id = %s
+            """, (monto_pago, int(usuario["sub"]), observaciones or None, monto_pago, prestamo_id))
+    return RedirectResponse(f"/admin/multas?msg=Pago+registrado+correctamente&tipo=success",
+                            status_code=302)
+
+
+# ─── Reportes PDF ─────────────────────────────────────────────────────────────
+
+@router.get("/reportes/productos")
+def reporte_productos(usuario: dict = Depends(requiere_admin)):
+    from app.services.reporte_service import reporte_productos as gen_pdf
+    articulos = articulo_service.listar_articulos()
+    pdf = gen_pdf(articulos)
+    from fastapi.responses import Response
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": "attachment; filename=inventario.pdf"})
+
+
+@router.get("/reportes/usuarios")
+def reporte_usuarios_pdf(usuario: dict = Depends(requiere_admin)):
+    from app.services.reporte_service import reporte_usuarios as gen_pdf
+    from app.database.connection import ejecutar_query
+    usuarios = ejecutar_query("SELECT * FROM v_usuarios")
+    pdf = gen_pdf(usuarios)
+    from fastapi.responses import Response
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": "attachment; filename=usuarios.pdf"})
+
+
+@router.get("/reportes/historial")
+def reporte_historial_pdf(usuario: dict = Depends(requiere_admin),
+                           desde: str = "", hasta: str = ""):
+    from app.services.reporte_service import reporte_historial as gen_pdf
+    from datetime import datetime
+    fi = datetime.fromisoformat(desde) if desde else None
+    ff = datetime.fromisoformat(hasta) if hasta else None
+    prestamos = prestamo_service.historial_completo(fi, ff)
+    pdf = gen_pdf(prestamos, fi, ff)
+    from fastapi.responses import Response
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": "attachment; filename=historial_prestamos.pdf"})
