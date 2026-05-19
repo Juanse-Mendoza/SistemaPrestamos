@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% block title %}Solicitudes{% endblock %}
+{% block body %}
+<div class="cliente-layout">
+  <header class="header">
+    <span class="header-logo">🔑 PrestaUni</span>
+    <span class="header-spacer"></span>
+    <span class="header-user">{{ usuario.nombre }}</span>
+    <div class="avatar">{{ usuario.nombre[:2]|upper }}</div>
+    <a href="/logout"><button class="btn btn-ghost btn-sm">Salir</button></a>
+  </header>
+
+  <div class="tab-bar">
+    <a href="/cliente/productos"><button class="tab-btn">Productos</button></a>
+    <a href="/cliente/solicitudes"><button class="tab-btn active">
+      Solicitudes
+      {% if solicitudes_count.total %}<span class="nav-badge">{{ solicitudes_count.total }}</span>{% endif %}
+    </button></a>
+    <a href="/cliente/historial"><button class="tab-btn">Historial</button></a>
+  </div>
+
+  <main class="content">
+    {% if msg %}
+    <div class="alert alert-{{ 'success' if tipo == 'success' else 'error' }}">{{ msg }}</div>
+    {% endif %}
+
+    <div class="section-row">
+      <span class="section-title">Mis solicitudes</span>
+      <a href="/cliente/solicitudes"><button class="btn btn-ghost btn-sm">↻ Actualizar</button></a>
+    </div>
+
+    {% if not pendientes and not dev_pendientes %}
+    <div class="card" style="padding:32px;text-align:center;color:var(--text-3)">
+      <div style="font-size:32px;margin-bottom:8px">✓</div>
+      <div style="font-size:15px;font-weight:600;color:var(--text-1);margin-bottom:4px">No tienes solicitudes pendientes</div>
+      <div class="text-sm">Cuando el administrador registre un préstamo o devolución a tu nombre, aparecerá aquí para que la confirmes.</div>
+    </div>
+    {% endif %}
+
+    <!-- Préstamos pendientes de aceptación -->
+    {% if pendientes %}
+    <div style="background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.45);border-radius:12px;padding:18px;margin-bottom:24px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="font-size:18px">🔔</span>
+        <span style="font-size:16px;font-weight:700;color:#b45309">
+          {{ pendientes|length }} préstamo{{ 's' if pendientes|length != 1 else '' }} por confirmar
+        </span>
+      </div>
+      <p class="text-muted text-sm" style="margin-bottom:14px">
+        El administrador registró {{ 'estas solicitudes' if pendientes|length != 1 else 'esta solicitud' }} a tu nombre.
+        Debes <strong>aceptar</strong> para activar el préstamo, o <strong>rechazar</strong> si no estás de acuerdo.
+      </p>
+      <div style="display:flex;flex-direction:column;gap:14px">
+      {% for p in pendientes %}
+        <div class="card" style="padding:16px">
+          <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;align-items:flex-start">
+            <div style="flex:1;min-width:220px">
+              <div style="font-weight:600;font-size:15px">{{ p.articulo }}</div>
+              <div class="text-muted text-sm" style="margin-top:2px">{{ p.descripcion_articulo or '' }}</div>
+              <div class="text-muted text-sm" style="margin-top:6px">
+                Código: <strong>{{ p.codigo_prestamo }}</strong> ·
+                Categoría: {{ p.categoria or '—' }} ·
+                Ubicación: {{ p.ubicacion or '—' }}
+              </div>
+              <div class="text-muted text-sm" style="margin-top:6px">
+                Solicitud: {{ p.fecha_prestamo.strftime('%Y-%m-%d %H:%M') if p.fecha_prestamo else '—' }} ·
+                Devolución esperada: <strong>{{ p.fecha_devolucion_esperada.strftime('%Y-%m-%d %H:%M') if p.fecha_devolucion_esperada else '—' }}</strong>
+              </div>
+              {% if p.observaciones %}
+              <div class="text-muted text-sm" style="margin-top:6px;font-style:italic">"{{ p.observaciones }}"</div>
+              {% endif %}
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;min-width:160px">
+              <button class="btn btn-success btn-sm" style="width:100%"
+                onclick="abrirAceptar({{ p.prestamo_id }}, '{{ p.articulo|replace("'","\\'") }}')">
+                ✓ Aceptar
+              </button>
+              <button class="btn btn-danger btn-sm" style="width:100%"
+                onclick="abrirRechazo({{ p.prestamo_id }}, '{{ p.articulo|replace("'","\\'") }}')">
+                ✕ Rechazar
+              </button>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Devoluciones por confirmar -->
+    {% if dev_pendientes %}
+    <div style="background:rgba(59,125,221,.08);border:1px solid rgba(59,125,221,.4);border-radius:12px;padding:18px;margin-bottom:24px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="font-size:18px">📋</span>
+        <span style="font-size:16px;font-weight:700;color:#1d4ed8">
+          {{ dev_pendientes|length }} devolución{{ 'es' if dev_pendientes|length != 1 else '' }} por confirmar
+        </span>
+      </div>
+      <p class="text-muted text-sm" style="margin-bottom:14px">
+        El administrador registró {{ 'las devoluciones' if dev_pendientes|length != 1 else 'la devolución' }} del/los artículo(s) que tenías prestados.
+        Si <strong>estás de acuerdo</strong> con cómo se recibió el artículo, confírmalo;
+        si <strong>no estás de acuerdo</strong>, rechaza indicando el motivo.
+      </p>
+      <div style="display:flex;flex-direction:column;gap:14px">
+      {% for d in dev_pendientes %}
+        <div class="card" style="padding:16px">
+          <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;align-items:flex-start">
+            <div style="flex:1;min-width:260px">
+              <div style="font-weight:600;font-size:15px">{{ d.articulo }}</div>
+              <div class="text-muted text-sm" style="margin-top:4px">
+                Código préstamo: <strong>{{ d.codigo_prestamo }}</strong> ·
+                Recibido por: {{ d.admin_recibe or '—' }}
+              </div>
+              <div class="text-muted text-sm" style="margin-top:4px">
+                Fecha registrada: <strong>{{ d.fecha_devolucion.strftime('%Y-%m-%d %H:%M') if d.fecha_devolucion else '—' }}</strong>
+              </div>
+              <div style="margin-top:8px">
+                <span class="text-sm" style="margin-right:8px">Estado declarado:</span>
+                <span class="badge badge-{{ d.estado_articulo_recibido }}">{{ d.estado_articulo_recibido|upper }}</span>
+              </div>
+              {% if d.observaciones %}
+              <div style="margin-top:10px;background:var(--bg-input);padding:10px 12px;border-radius:6px;font-family:monospace;font-size:12px;white-space:pre-wrap;color:var(--text-1)">{{ d.observaciones }}</div>
+              {% endif %}
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;min-width:200px">
+              <button class="btn btn-success btn-sm" style="width:100%"
+                onclick="abrirConfirmarDev({{ d.devolucion_id }}, '{{ d.articulo|replace("'","\\'") }}', '{{ d.estado_articulo_recibido }}')">
+                ✓ Acepto la devolución
+              </button>
+              <button class="btn btn-danger btn-sm" style="width:100%"
+                onclick="abrirRechazoDev({{ d.devolucion_id }}, '{{ d.articulo|replace("'","\\'") }}', '{{ d.estado_articulo_recibido }}')">
+                ✕ No estoy de acuerdo
+              </button>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </main>
+</div>
+
+<!-- Modal aceptar préstamo pendiente -->
+<div class="modal-backdrop" id="modal-aceptar">
+  <div class="modal">
+    <h3 class="modal-title">Aceptar préstamo</h3>
+    <p class="text-muted text-sm" style="margin-bottom:14px">
+      Vas a aceptar el préstamo del artículo: <strong id="acep-articulo"></strong>.<br/>
+      El préstamo quedará <strong>activo</strong> a tu nombre.
+    </p>
+    <form id="acep-form" method="post">
+      <div class="form-group">
+        <label class="form-label">Comentario al aceptar (opcional)</label>
+        <textarea class="form-control" name="motivo" rows="3"
+                  placeholder="Ej: lo necesito para el laboratorio del viernes..."></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('modal-aceptar')">Cancelar</button>
+        <button type="submit" class="btn btn-success">✓ Confirmar aceptación</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal aceptar devolución -->
+<div class="modal-backdrop" id="modal-confirmar-dev">
+  <div class="modal">
+    <h3 class="modal-title">Acepto la devolución</h3>
+    <p class="text-muted text-sm" style="margin-bottom:14px">
+      Vas a confirmar la devolución del artículo: <strong id="cdev-articulo"></strong>.<br/>
+      Estado declarado por el admin: <strong id="cdev-estado"></strong>.<br/>
+      Asumes responsabilidad sobre el estado registrado.
+    </p>
+    <form id="cdev-form" method="post">
+      <div class="form-group">
+        <label class="form-label">Comentario al aceptar (opcional)</label>
+        <textarea class="form-control" name="motivo" rows="3"
+                  placeholder="Ej: todo correcto, gracias..."></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('modal-confirmar-dev')">Cancelar</button>
+        <button type="submit" class="btn btn-success">✓ Confirmar devolución</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal rechazo de préstamo pendiente -->
+<div class="modal-backdrop" id="modal-rechazo">
+  <div class="modal">
+    <h3 class="modal-title">Rechazar préstamo</h3>
+    <p class="text-muted text-sm" style="margin-bottom:14px">
+      Vas a rechazar el préstamo del artículo: <strong id="rech-articulo"></strong>.<br/>
+      El stock se restaurará y el administrador verá el motivo.
+    </p>
+    <form id="rech-form" method="post">
+      <div class="form-group">
+        <label class="form-label">Motivo del rechazo (opcional)</label>
+        <textarea class="form-control" name="motivo" rows="3"
+                  placeholder="Ej: ya no necesito el artículo, fecha no me conviene..."></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('modal-rechazo')">Cancelar</button>
+        <button type="submit" class="btn btn-danger">Confirmar rechazo</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal rechazo de devolución -->
+<div class="modal-backdrop" id="modal-rechazo-dev">
+  <div class="modal">
+    <h3 class="modal-title">No estoy de acuerdo con la devolución</h3>
+    <p class="text-muted text-sm" style="margin-bottom:14px">
+      Vas a rechazar el registro de devolución del artículo: <strong id="rdev-articulo"></strong>.<br/>
+      Estado declarado por el admin: <strong id="rdev-estado"></strong>.<br/>
+      La devolución quedará en <strong>disputa</strong> y el administrador deberá revisar tu motivo.
+    </p>
+    <form id="rdev-form" method="post">
+      <div class="form-group">
+        <label class="form-label">Motivo del rechazo <span style="color:var(--danger)">*</span></label>
+        <textarea class="form-control" name="motivo" rows="4" required
+                  placeholder="Ej: el artículo lo entregué en buen estado, no estaba dañado..."></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('modal-rechazo-dev')">Cancelar</button>
+        <button type="submit" class="btn btn-danger">Registrar disputa</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function abrirAceptar(id, articulo) {
+  document.getElementById('acep-articulo').textContent = articulo;
+  document.getElementById('acep-form').action = `/cliente/prestamos/${id}/aceptar`;
+  document.getElementById('acep-form').querySelector('textarea').value = '';
+  openModal('modal-aceptar');
+}
+function abrirRechazo(id, articulo) {
+  document.getElementById('rech-articulo').textContent = articulo;
+  document.getElementById('rech-form').action = `/cliente/prestamos/${id}/rechazar`;
+  document.getElementById('rech-form').querySelector('textarea').value = '';
+  openModal('modal-rechazo');
+}
+function abrirConfirmarDev(id, articulo, estado) {
+  document.getElementById('cdev-articulo').textContent = articulo;
+  document.getElementById('cdev-estado').textContent  = (estado || '').toUpperCase();
+  document.getElementById('cdev-form').action = `/cliente/devoluciones/${id}/confirmar`;
+  document.getElementById('cdev-form').querySelector('textarea').value = '';
+  openModal('modal-confirmar-dev');
+}
+function abrirRechazoDev(id, articulo, estado) {
+  document.getElementById('rdev-articulo').textContent = articulo;
+  document.getElementById('rdev-estado').textContent  = (estado || '').toUpperCase();
+  document.getElementById('rdev-form').action = `/cliente/devoluciones/${id}/rechazar`;
+  document.getElementById('rdev-form').querySelector('textarea').value = '';
+  openModal('modal-rechazo-dev');
+}
+</script>
+{% endblock %}

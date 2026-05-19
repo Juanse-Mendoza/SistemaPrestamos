@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+{% block title %}Solicitudes{% endblock %}
+{% block body %}
+<div class="admin-layout">
+  <header class="header">
+    <span class="header-logo">🔑 PrestaUni</span>
+    <span class="header-title">Solicitudes</span>
+    <span class="header-spacer"></span>
+    <span class="header-user">{{ usuario.nombre }}</span>
+    <div class="avatar">{{ usuario.nombre[:2]|upper }}</div>
+    <a href="/logout"><button class="btn btn-ghost btn-sm">Salir</button></a>
+  </header>
+
+  <nav class="sidebar" style="display:flex;flex-direction:column">
+    <p class="sidebar-menu-label">MENÚ</p>
+    <a href="/admin/dashboard"><button class="nav-btn">⬛ Dashboard</button></a>
+    <a href="/admin/solicitudes"><button class="nav-btn active">✉ Solicitudes
+      {% if solicitudes_count.total %}<span class="nav-badge">{{ solicitudes_count.total }}</span>{% endif %}
+    </button></a>
+    <a href="/admin/multas"><button class="nav-btn">$ Multas
+      {% if multas_count %}<span class="nav-badge">{{ multas_count }}</span>{% endif %}
+    </button></a>
+    <a href="/admin/productos"><button class="nav-btn">■ Productos</button></a>
+    <a href="/admin/historial"><button class="nav-btn">▤ Historial</button></a>
+    <a href="/admin/usuarios"><button class="nav-btn">◈ Usuarios</button></a>
+    <div style="flex:1"></div>
+    <div class="sidebar-bottom">Rol: Administrador<br/>{{ usuario.correo }}</div>
+  </nav>
+
+  <main class="content">
+    {% if msg %}
+    <div class="alert alert-{{ 'success' if tipo == 'success' else 'error' }}">{{ msg }}</div>
+    {% endif %}
+
+    <div class="section-row">
+      <span class="section-title">Solicitudes y disputas</span>
+      <a href="/admin/solicitudes"><button class="btn btn-ghost btn-sm">↻ Actualizar</button></a>
+    </div>
+
+    {% if not pendientes and not disputas %}
+    <div class="card" style="padding:32px;text-align:center;color:var(--text-3)">
+      <div style="font-size:32px;margin-bottom:8px">✓</div>
+      <div style="font-size:15px;font-weight:600;color:var(--text-1);margin-bottom:4px">No hay solicitudes pendientes</div>
+      <div class="text-sm">Aquí verás los préstamos en espera de aceptación del estudiante y las devoluciones que el estudiante rechazó.</div>
+    </div>
+    {% endif %}
+
+    <!-- Préstamos pendientes (esperando que el estudiante acepte) -->
+    {% if pendientes %}
+    <div style="background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.45);border-radius:12px;padding:16px;margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="font-size:18px">⏳</span>
+        <span style="font-size:15px;font-weight:700;color:#b45309">
+          {{ pendientes|length }} préstamo{{ 's' if pendientes|length != 1 else '' }} pendiente{{ 's' if pendientes|length != 1 else '' }} de aceptación del estudiante
+        </span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Código</th><th>Estudiante</th><th>Correo</th>
+              <th>Artículo</th><th>Solicitado</th><th>Devolución esperada</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for p in pendientes %}
+            <tr style="cursor:pointer" onclick="verPendiente({{ p.prestamo_id }})" title="Click para ver detalle">
+              <td class="text-muted text-sm">{{ p.codigo_prestamo }}</td>
+              <td>{{ p.usuario_nombre }}</td>
+              <td class="text-muted text-sm">{{ p.usuario_correo }}</td>
+              <td>{{ p.articulo }}</td>
+              <td class="text-muted text-sm">{{ p.fecha_prestamo.strftime('%Y-%m-%d %H:%M') if p.fecha_prestamo else '—' }}</td>
+              <td class="text-muted text-sm">{{ p.fecha_devolucion_esperada.strftime('%Y-%m-%d %H:%M') if p.fecha_devolucion_esperada else '—' }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Devoluciones en disputa (estudiante rechazó el registro) -->
+    {% if disputas %}
+    <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.45);border-radius:12px;padding:16px;margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="font-size:18px">⚠️</span>
+        <span style="font-size:15px;font-weight:700;color:#b91c1c">
+          {{ disputas|length }} devoluci{{ 'ones' if disputas|length != 1 else 'ón' }} en disputa con el estudiante
+        </span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Código</th><th>Estudiante</th><th>Correo</th>
+              <th>Artículo</th><th>Estado declarado</th>
+              <th>Fecha devolución</th><th>Motivo del estudiante</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for d in disputas %}
+            <tr style="cursor:pointer" onclick="verDisputa({{ d.devolucion_id }})" title="Click para ver detalle">
+              <td class="text-muted text-sm">{{ d.codigo_prestamo }}</td>
+              <td>{{ d.usuario_nombre }}</td>
+              <td class="text-muted text-sm">{{ d.usuario_correo }}</td>
+              <td>{{ d.articulo }}</td>
+              <td><span class="badge badge-{{ d.estado_articulo_recibido }}">{{ d.estado_articulo_recibido|upper }}</span></td>
+              <td class="text-muted text-sm">{{ d.fecha_devolucion.strftime('%Y-%m-%d %H:%M') if d.fecha_devolucion else '—' }}</td>
+              <td class="text-sm" style="max-width:280px;white-space:pre-wrap">{{ d.motivo_rechazo }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  </main>
+</div>
+
+<!-- Modal: detalle de préstamo pendiente -->
+<div class="modal-backdrop" id="modal-pendiente">
+  <div class="modal modal-lg">
+    <h3 class="modal-title">Detalle del préstamo pendiente</h3>
+    <div id="pend-loading" class="text-muted text-sm">Cargando…</div>
+    <div id="pend-body" style="display:none">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;font-size:13px">
+        <div><div class="text-muted text-sm">Código</div><div id="pend-codigo" style="font-weight:600"></div></div>
+        <div><div class="text-muted text-sm">Estudiante</div><div id="pend-est"></div></div>
+        <div><div class="text-muted text-sm">Correo</div><div id="pend-correo"></div></div>
+        <div><div class="text-muted text-sm">Documento</div><div id="pend-doc"></div></div>
+        <div><div class="text-muted text-sm">Artículo</div><div id="pend-art" style="font-weight:600"></div></div>
+        <div><div class="text-muted text-sm">Código interno</div><div id="pend-ci"></div></div>
+        <div><div class="text-muted text-sm">Categoría</div><div id="pend-cat"></div></div>
+        <div><div class="text-muted text-sm">Ubicación</div><div id="pend-ubic"></div></div>
+        <div><div class="text-muted text-sm">Fecha de solicitud</div><div id="pend-fp"></div></div>
+        <div><div class="text-muted text-sm">Devolución esperada</div><div id="pend-fde"></div></div>
+      </div>
+      <div style="margin-top:12px">
+        <div class="text-muted text-sm">Observaciones</div>
+        <div id="pend-obs" style="background:var(--bg-input);padding:10px 12px;border-radius:6px;font-size:13px;white-space:pre-wrap;min-height:38px"></div>
+      </div>
+
+      <div style="margin-top:16px;background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.3);padding:12px;border-radius:8px">
+        <p style="font-size:13px;font-weight:600;margin-bottom:8px">¿Quieres retirar este préstamo?</p>
+        <form id="pend-cancelar-form" method="post">
+          <div class="form-group">
+            <label class="form-label">Motivo de la cancelación <span style="color:var(--danger)">*</span></label>
+            <textarea class="form-control" name="motivo" rows="2" required
+                      placeholder="Ej: error de digitación, artículo no disponible..."></textarea>
+          </div>
+          <button type="submit" class="btn btn-danger btn-sm">Cancelar préstamo</button>
+        </form>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" onclick="closeModal('modal-pendiente')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: detalle de disputa de devolución -->
+<div class="modal-backdrop" id="modal-disputa">
+  <div class="modal modal-lg">
+    <h3 class="modal-title">Disputa de devolución</h3>
+    <div id="disp-loading" class="text-muted text-sm">Cargando…</div>
+    <div id="disp-body" style="display:none">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;font-size:13px">
+        <div><div class="text-muted text-sm">Código préstamo</div><div id="disp-codigo" style="font-weight:600"></div></div>
+        <div><div class="text-muted text-sm">Estudiante</div><div id="disp-est"></div></div>
+        <div><div class="text-muted text-sm">Correo</div><div id="disp-correo"></div></div>
+        <div><div class="text-muted text-sm">Artículo</div><div id="disp-art" style="font-weight:600"></div></div>
+        <div><div class="text-muted text-sm">Admin que recibió</div><div id="disp-admin"></div></div>
+        <div><div class="text-muted text-sm">Estado declarado</div><div><span id="disp-estado-badge" class="badge"></span></div></div>
+        <div><div class="text-muted text-sm">Fecha devolución</div><div id="disp-fdev"></div></div>
+        <div><div class="text-muted text-sm">Fecha de rechazo</div><div id="disp-frech"></div></div>
+      </div>
+
+      <div style="margin-top:14px">
+        <div class="text-muted text-sm">Registro del admin</div>
+        <div id="disp-obs" style="background:var(--bg-input);padding:10px 12px;border-radius:6px;font-family:monospace;font-size:12px;white-space:pre-wrap;min-height:38px"></div>
+      </div>
+      <div style="margin-top:14px">
+        <div class="text-muted text-sm">Motivo del estudiante</div>
+        <div id="disp-motivo" style="background:rgba(239,68,68,.06);padding:10px 12px;border-radius:6px;border:1px solid rgba(239,68,68,.25);font-size:13px;white-space:pre-wrap"></div>
+      </div>
+
+      <!-- Acción 1: corregir y reenviar -->
+      <details style="margin-top:18px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.4);padding:12px;border-radius:8px">
+        <summary style="cursor:pointer;font-weight:600;font-size:13px;color:#b45309">
+          ✎ Corregir y reenviar al estudiante
+        </summary>
+        <form id="disp-corregir-form" method="post" style="margin-top:12px">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Nuevo estado del artículo</label>
+              <select class="form-control" name="nuevo_estado" required>
+                <option value="disponible">Disponible (buen estado)</option>
+                <option value="mantenimiento">Requiere mantenimiento</option>
+                <option value="baja">Inutilizable — dar de baja</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nuevas observaciones (opcional)</label>
+              <textarea class="form-control" name="nuevas_observaciones" rows="2"
+                        placeholder="Si deseas reescribir las observaciones..."></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nota explicando la corrección <span style="color:var(--danger)">*</span></label>
+              <textarea class="form-control" name="nota_admin" rows="2" required
+                        placeholder="Explica por qué cambias el registro..."></textarea>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-warning btn-sm" style="margin-top:8px">
+            Reenviar al estudiante
+          </button>
+        </form>
+      </details>
+
+      <!-- Acción 2: cerrar disputa -->
+      <details style="margin-top:10px;background:rgba(59,125,221,.08);border:1px solid rgba(59,125,221,.4);padding:12px;border-radius:8px">
+        <summary style="cursor:pointer;font-weight:600;font-size:13px;color:#1d4ed8">
+          ✓ Cerrar disputa (mantener mi decisión)
+        </summary>
+        <form id="disp-cerrar-form" method="post" style="margin-top:12px">
+          <div class="form-group">
+            <label class="form-label">Nota de cierre <span style="color:var(--danger)">*</span></label>
+            <textarea class="form-control" name="nota" rows="2" required
+                      placeholder="Justificación de por qué se mantiene la decisión..."></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm" style="margin-top:8px"
+                  onclick="return confirm('¿Confirmas que se cierra la disputa? La devolución quedará confirmada con tu nota.')">
+            Cerrar disputa
+          </button>
+        </form>
+      </details>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" onclick="closeModal('modal-disputa')">Cerrar</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function verPendiente(id) {
+  document.getElementById('pend-loading').style.display = 'block';
+  document.getElementById('pend-body').style.display    = 'none';
+  openModal('modal-pendiente');
+  try {
+    const r = await fetch(`/admin/api/solicitudes/prestamo/${id}`);
+    if (!r.ok) throw new Error('No se pudo cargar');
+    const d = await r.json();
+    document.getElementById('pend-codigo').textContent = d.codigo;
+    document.getElementById('pend-est').textContent    = d.estudiante;
+    document.getElementById('pend-correo').textContent = d.correo;
+    document.getElementById('pend-doc').textContent    = d.documento || '—';
+    document.getElementById('pend-art').textContent    = d.articulo;
+    document.getElementById('pend-ci').textContent     = d.codigo_interno || '—';
+    document.getElementById('pend-cat').textContent    = d.categoria || '—';
+    document.getElementById('pend-ubic').textContent   = d.ubicacion || '—';
+    document.getElementById('pend-fp').textContent     = d.fecha_prestamo || '—';
+    document.getElementById('pend-fde').textContent    = d.fecha_dev_esp || '—';
+    document.getElementById('pend-obs').textContent    = d.observaciones || '(sin observaciones)';
+    document.getElementById('pend-cancelar-form').action = `/admin/solicitudes/prestamos/${id}/cancelar`;
+    document.getElementById('pend-loading').style.display = 'none';
+    document.getElementById('pend-body').style.display    = 'block';
+  } catch (e) {
+    document.getElementById('pend-loading').textContent = 'Error cargando el detalle.';
+  }
+}
+
+async function verDisputa(id) {
+  document.getElementById('disp-loading').style.display = 'block';
+  document.getElementById('disp-body').style.display    = 'none';
+  openModal('modal-disputa');
+  try {
+    const r = await fetch(`/admin/api/solicitudes/disputa/${id}`);
+    if (!r.ok) throw new Error('No se pudo cargar');
+    const d = await r.json();
+    document.getElementById('disp-codigo').textContent = d.codigo;
+    document.getElementById('disp-est').textContent    = d.estudiante;
+    document.getElementById('disp-correo').textContent = d.correo;
+    document.getElementById('disp-art').textContent    = d.articulo;
+    document.getElementById('disp-admin').textContent  = d.admin_recibio || '—';
+    const badge = document.getElementById('disp-estado-badge');
+    badge.className = 'badge badge-' + d.estado;
+    badge.textContent = (d.estado || '').toUpperCase();
+    document.getElementById('disp-fdev').textContent  = d.fecha_devolucion || '—';
+    document.getElementById('disp-frech').textContent = d.fecha_rechazo || '—';
+    document.getElementById('disp-obs').textContent   = d.observaciones || '(sin registro)';
+    document.getElementById('disp-motivo').textContent = d.motivo_rechazo || '(sin motivo)';
+    document.getElementById('disp-corregir-form').action = `/admin/solicitudes/disputas/${id}/corregir`;
+    document.getElementById('disp-cerrar-form').action   = `/admin/solicitudes/disputas/${id}/cerrar`;
+    document.getElementById('disp-loading').style.display = 'none';
+    document.getElementById('disp-body').style.display    = 'block';
+  } catch (e) {
+    document.getElementById('disp-loading').textContent = 'Error cargando el detalle.';
+  }
+}
+</script>
+{% endblock %}

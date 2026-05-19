@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}Historial de disputas{% endblock %}
+{% block body %}
+<div class="admin-layout">
+  <header class="header">
+    <span class="header-logo">🔑 PrestaUni</span>
+    <span class="header-title">Historial</span>
+    <span class="header-spacer"></span>
+    <span class="header-user">{{ usuario.nombre }}</span>
+    <div class="avatar">{{ usuario.nombre[:2]|upper }}</div>
+    <a href="/logout"><button class="btn btn-ghost btn-sm">Salir</button></a>
+  </header>
+
+  <nav class="sidebar" style="display:flex;flex-direction:column">
+    <p class="sidebar-menu-label">MENÚ</p>
+    <a href="/admin/dashboard"><button class="nav-btn">⬛ Dashboard</button></a>
+    <a href="/admin/solicitudes"><button class="nav-btn">✉ Solicitudes
+      {% if solicitudes_count.total %}<span class="nav-badge">{{ solicitudes_count.total }}</span>{% endif %}
+    </button></a>
+    <a href="/admin/multas"><button class="nav-btn">$ Multas
+      {% if multas_count %}<span class="nav-badge">{{ multas_count }}</span>{% endif %}
+    </button></a>
+    <a href="/admin/productos"><button class="nav-btn">■ Productos</button></a>
+    <a href="/admin/historial"><button class="nav-btn active">▤ Historial</button></a>
+    <a href="/admin/usuarios"><button class="nav-btn">◈ Usuarios</button></a>
+    <div style="flex:1"></div>
+    <div class="sidebar-bottom">Rol: Administrador<br/>{{ usuario.correo }}</div>
+  </nav>
+
+  <main class="content">
+    {% if msg %}
+    <div class="alert alert-{{ 'success' if tipo == 'success' else 'error' }}">{{ msg }}</div>
+    {% endif %}
+
+    <!-- Sub-tabs del módulo Historial -->
+    <div style="display:flex;gap:6px;border-bottom:1px solid var(--border);margin-bottom:18px">
+      <a href="/admin/historial" style="text-decoration:none">
+        <div style="padding:10px 18px;font-size:13px;font-weight:500;color:var(--text-2);border-bottom:2px solid transparent;margin-bottom:-1px">
+          ▤ Préstamos
+        </div>
+      </a>
+      <a href="/admin/disputas" style="text-decoration:none">
+        <div style="padding:10px 18px;font-size:13px;font-weight:600;color:var(--blue);border-bottom:2px solid var(--blue);margin-bottom:-1px">
+          ⚠ Disputas
+        </div>
+      </a>
+    </div>
+
+    <div class="section-row">
+      <span class="section-title">Historial de disputas</span>
+      <a href="/admin/disputas"><button class="btn btn-ghost btn-sm">↻ Actualizar</button></a>
+    </div>
+
+    <!-- Resumen -->
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+      <div class="card" style="padding:14px 20px;flex:1;min-width:120px">
+        <div class="metric-label">Total</div>
+        <div class="metric-value" style="font-size:24px">{{ total }}</div>
+      </div>
+      <div class="card metric-card red" style="padding:14px 20px;flex:1;min-width:120px">
+        <div class="metric-label">Activas</div>
+        <div class="metric-value" style="font-size:24px">{{ activas }}</div>
+      </div>
+      <div class="card metric-card orange" style="padding:14px 20px;flex:1;min-width:120px">
+        <div class="metric-label">Corregidas</div>
+        <div class="metric-value" style="font-size:24px">{{ corregidas }}</div>
+      </div>
+      <div class="card metric-card green" style="padding:14px 20px;flex:1;min-width:120px">
+        <div class="metric-label">Cerradas</div>
+        <div class="metric-value" style="font-size:24px">{{ cerradas }}</div>
+      </div>
+    </div>
+
+    <!-- Filtros -->
+    <form method="get" action="/admin/disputas" class="flex gap-3 items-center mb-4"
+          style="flex-wrap:wrap;display:flex;gap:10px;align-items:center;margin-bottom:16px">
+      <label class="form-label" style="margin:0">Estado:</label>
+      <select class="form-control" name="estado" style="width:160px">
+        <option value=""           {% if not estado %}selected{% endif %}>Todas</option>
+        <option value="activa"     {% if estado=='activa' %}selected{% endif %}>Activas</option>
+        <option value="corregida"  {% if estado=='corregida' %}selected{% endif %}>Corregidas</option>
+        <option value="cerrada"    {% if estado=='cerrada' %}selected{% endif %}>Cerradas</option>
+      </select>
+      <label class="form-label" style="margin:0">Desde:</label>
+      <input class="form-control" type="date" name="desde" value="{{ desde }}" style="width:160px"/>
+      <label class="form-label" style="margin:0">Hasta:</label>
+      <input class="form-control" type="date" name="hasta" value="{{ hasta }}" style="width:160px"/>
+      <button type="submit" class="btn btn-ghost btn-sm">Filtrar</button>
+      <a href="/admin/disputas"><button type="button" class="btn btn-ghost btn-sm">Todo</button></a>
+    </form>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Código</th><th>Estudiante</th><th>Artículo</th>
+            <th>Estado declarado</th>
+            <th>Fecha devolución</th><th>Fecha resolución</th>
+            <th>Estado disputa</th><th>Detalle</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for d in disputas %}
+          <tr style="cursor:pointer" onclick="verDisputaHist({{ d.devolucion_id }}, '{{ d.estado_disputa }}')">
+            <td class="text-muted text-sm">{{ d.codigo_prestamo }}</td>
+            <td>{{ d.usuario_nombre }}<br/><span class="text-muted text-sm">{{ d.usuario_correo }}</span></td>
+            <td>{{ d.articulo }}</td>
+            <td><span class="badge badge-{{ d.estado_articulo_recibido }}">{{ d.estado_articulo_recibido|upper }}</span></td>
+            <td class="text-muted text-sm">{{ d.fecha_devolucion.strftime('%Y-%m-%d %H:%M') if d.fecha_devolucion else '—' }}</td>
+            <td class="text-muted text-sm">{{ d.fecha_confirmacion.strftime('%Y-%m-%d %H:%M') if d.fecha_confirmacion else '—' }}</td>
+            <td>
+              {% if d.estado_disputa == 'activa' %}
+                <span class="badge badge-vencido">ACTIVA</span>
+              {% elif d.estado_disputa == 'corregida' %}
+                <span class="badge badge-pendiente">CORREGIDA</span>
+              {% else %}
+                <span class="badge badge-devuelto">CERRADA</span>
+              {% endif %}
+            </td>
+            <td><button type="button" class="btn btn-ghost btn-sm">Ver →</button></td>
+          </tr>
+        {% else %}
+          <tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:32px">
+            No hay disputas registradas en el periodo seleccionado.
+          </td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<!-- Modal detalle (reutiliza el de solicitudes) -->
+<div class="modal-backdrop" id="modal-disputa-hist">
+  <div class="modal modal-lg">
+    <h3 class="modal-title">Detalle de disputa <span id="dh-estado-titulo" style="font-size:12px;font-weight:600;padding:3px 10px;border-radius:12px;margin-left:8px"></span></h3>
+    <div id="dh-loading" class="text-muted text-sm">Cargando…</div>
+    <div id="dh-body" style="display:none">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;font-size:13px">
+        <div><div class="text-muted text-sm">Código préstamo</div><div id="dh-codigo" style="font-weight:600"></div></div>
+        <div><div class="text-muted text-sm">Estudiante</div><div id="dh-est"></div></div>
+        <div><div class="text-muted text-sm">Correo</div><div id="dh-correo"></div></div>
+        <div><div class="text-muted text-sm">Artículo</div><div id="dh-art" style="font-weight:600"></div></div>
+        <div><div class="text-muted text-sm">Admin que recibió</div><div id="dh-admin"></div></div>
+        <div><div class="text-muted text-sm">Estado declarado</div><div><span id="dh-estado-badge" class="badge"></span></div></div>
+        <div><div class="text-muted text-sm">Fecha devolución</div><div id="dh-fdev"></div></div>
+        <div><div class="text-muted text-sm">Fecha resolución</div><div id="dh-frech"></div></div>
+      </div>
+      <div style="margin-top:14px">
+        <div class="text-muted text-sm">Registro / trazabilidad completa</div>
+        <div id="dh-obs" style="background:var(--bg-input);padding:10px 12px;border-radius:6px;font-family:monospace;font-size:12px;white-space:pre-wrap;min-height:38px;max-height:280px;overflow:auto"></div>
+      </div>
+      <div style="margin-top:14px">
+        <div class="text-muted text-sm">Motivo del estudiante</div>
+        <div id="dh-motivo" style="background:rgba(239,68,68,.06);padding:10px 12px;border-radius:6px;border:1px solid rgba(239,68,68,.25);font-size:13px;white-space:pre-wrap"></div>
+      </div>
+
+      <div id="dh-acciones" style="margin-top:14px;display:none">
+        <p class="text-sm text-muted" style="margin-bottom:6px">
+          Esta disputa sigue activa. Puedes gestionarla desde la pantalla de solicitudes:
+        </p>
+        <a href="/admin/solicitudes"><button class="btn btn-primary btn-sm">Ir a solicitudes →</button></a>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" onclick="closeModal('modal-disputa-hist')">Cerrar</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function verDisputaHist(id, estadoDisputa) {
+  const titulo = document.getElementById('dh-estado-titulo');
+  titulo.textContent = (estadoDisputa || '').toUpperCase();
+  titulo.style.background = estadoDisputa === 'activa'
+    ? 'rgba(239,68,68,.15)' : estadoDisputa === 'corregida'
+    ? 'rgba(245,158,11,.18)' : 'rgba(34,197,94,.18)';
+  titulo.style.color = estadoDisputa === 'activa'
+    ? '#dc2626' : estadoDisputa === 'corregida' ? '#b45309' : '#16a34a';
+
+  document.getElementById('dh-loading').style.display = 'block';
+  document.getElementById('dh-body').style.display    = 'none';
+  document.getElementById('dh-acciones').style.display = estadoDisputa === 'activa' ? 'block' : 'none';
+  openModal('modal-disputa-hist');
+
+  try {
+    const r = await fetch(`/admin/api/disputas/${id}`);
+    if (!r.ok) throw new Error('No se pudo cargar');
+    const d = await r.json();
+    document.getElementById('dh-codigo').textContent = d.codigo;
+    document.getElementById('dh-est').textContent    = d.estudiante;
+    document.getElementById('dh-correo').textContent = d.correo;
+    document.getElementById('dh-art').textContent    = d.articulo;
+    document.getElementById('dh-admin').textContent  = d.admin_recibio || '—';
+    const badge = document.getElementById('dh-estado-badge');
+    badge.className = 'badge badge-' + d.estado;
+    badge.textContent = (d.estado || '').toUpperCase();
+    document.getElementById('dh-fdev').textContent  = d.fecha_devolucion || '—';
+    document.getElementById('dh-frech').textContent = d.fecha_resolucion || '—';
+    document.getElementById('dh-obs').textContent   = d.observaciones || '(sin registro)';
+    document.getElementById('dh-motivo').textContent = d.motivo_rechazo || '(sin motivo)';
+    document.getElementById('dh-loading').style.display = 'none';
+    document.getElementById('dh-body').style.display    = 'block';
+  } catch (e) {
+    document.getElementById('dh-loading').textContent = 'Error cargando el detalle.';
+  }
+}
+</script>
+{% endblock %}

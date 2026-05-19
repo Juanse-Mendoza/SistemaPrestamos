@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Mis préstamos{% endblock %}
+{% block body %}
+<div class="cliente-layout">
+  <header class="header">
+    <span class="header-logo">🔑 PrestaUni</span>
+    <span class="header-spacer"></span>
+    <span class="header-user">{{ usuario.nombre }}</span>
+    <div class="avatar">{{ usuario.nombre[:2]|upper }}</div>
+    <a href="/logout"><button class="btn btn-ghost btn-sm">Salir</button></a>
+  </header>
+
+  <div class="tab-bar">
+    <a href="/cliente/productos"><button class="tab-btn">Productos</button></a>
+    <a href="/cliente/solicitudes"><button class="tab-btn">
+      Solicitudes
+      {% if solicitudes_count.total %}<span class="nav-badge">{{ solicitudes_count.total }}</span>{% endif %}
+    </button></a>
+    <a href="/cliente/historial"><button class="tab-btn active">Historial</button></a>
+  </div>
+
+  <main class="content">
+    {% if msg %}
+    <div class="alert alert-{{ 'success' if tipo == 'success' else 'error' }}">{{ msg }}</div>
+    {% endif %}
+
+    <!-- Aviso de multas pendientes -->
+    {% if multas %}
+    <div style="background:rgba(239,68,68,.08);border:2px solid rgba(239,68,68,.5);border-radius:12px;padding:18px;margin-bottom:24px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="font-size:22px">⚠️</span>
+        <span style="font-size:18px;font-weight:700;color:#b91c1c">
+          Tienes un saldo pendiente de multas por {{ total_multa_formato }}
+        </span>
+      </div>
+      <p class="text-muted text-sm" style="margin-bottom:12px;line-height:1.5">
+        Las multas se calculan automáticamente por cada hora de retraso sobre la fecha de devolución
+        esperada. La tarifa por hora depende del artículo.
+        <strong>Solo puedes cancelar la multa acercándote físicamente al centro administrativo</strong>
+        y se aceptan <strong>pagos parciales</strong>. Aparte de eso debes devolver el artículo prestado.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Código</th><th>Artículo</th><th>Estado</th>
+                <th>Dev. esperada</th><th>Horas</th><th>Tarifa/h</th>
+                <th>Total</th><th>Pagado</th><th>Saldo</th></tr>
+          </thead>
+          <tbody>
+          {% for m in multas %}
+            <tr>
+              <td class="text-muted text-sm">{{ m.codigo_prestamo }}</td>
+              <td style="font-weight:500">{{ m.articulo }}</td>
+              <td>
+                {% if m.aun_activo %}
+                  <span class="badge badge-vencido">VENCIDO ACTIVO</span>
+                {% else %}
+                  <span class="badge badge-devuelto">DEVUELTO TARDE</span>
+                {% endif %}
+              </td>
+              <td class="text-muted text-sm">{{ m.fecha_devolucion_esperada.strftime('%Y-%m-%d %H:%M') if m.fecha_devolucion_esperada else '—' }}</td>
+              <td style="text-align:center">{{ m.multa_horas }}</td>
+              <td class="text-muted text-sm">{{ m.multa_tasa_hora_formato }}</td>
+              <td>{{ m.multa_monto_formato }}</td>
+              <td style="color:#16a34a">{{ m.multa_pagado_formato }}</td>
+              <td style="font-weight:700;color:#b91c1c">{{ m.multa_saldo_formato }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% set sigue_corriendo = multas | selectattr('aun_activo') | list %}
+      {% if sigue_corriendo %}
+      <p class="text-sm" style="margin-top:10px;color:#b91c1c;font-weight:600">
+        ⏱ El monto sigue aumentando cada hora hasta que devuelvas el(los) artículo(s).
+      </p>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="section-row">
+      <span class="section-title">Mis préstamos</span>
+      <a href="/cliente/historial"><button class="btn btn-ghost btn-sm">↻ Actualizar</button></a>
+    </div>
+
+    <!-- Resumen rápido -->
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+      <div class="card" style="padding:14px 20px;flex:1;min-width:120px">
+        <div class="metric-label">Total</div>
+        <div class="metric-value" style="font-size:24px">{{ total }}</div>
+      </div>
+      <div class="card metric-card orange" style="padding:14px 20px;flex:1;min-width:120px">
+        <div class="metric-label">Activos</div>
+        <div class="metric-value" style="font-size:24px">{{ activos }}</div>
+      </div>
+      <div class="card metric-card red" style="padding:14px 20px;flex:1;min-width:120px">
+        <div class="metric-label">Vencidos</div>
+        <div class="metric-value" style="font-size:24px">{{ vencidos }}</div>
+      </div>
+      <div class="card metric-card green" style="padding:14px 20px;flex:1;min-width:120px">
+        <div class="metric-label">Devueltos</div>
+        <div class="metric-value" style="font-size:24px">{{ total - activos - vencidos }}</div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Código</th><th>Artículo</th><th>Categoría</th>
+              <th>Fecha préstamo</th><th>Dev. esperada</th><th>Dev. real</th><th>Estado</th></tr>
+        </thead>
+        <tbody>
+        {% for p in prestamos %}
+          <tr>
+            <td class="text-muted text-sm">{{ p.codigo_prestamo }}</td>
+            <td style="font-weight:500">{{ p.articulo_nombre }}</td>
+            <td class="text-muted text-sm">{{ p.descripcion_articulo or '—' }}</td>
+            <td class="text-muted text-sm">{{ p.fecha_prestamo.strftime('%Y-%m-%d %H:%M') if p.fecha_prestamo else '—' }}</td>
+            <td class="text-muted text-sm">{{ p.fecha_devolucion_esperada.strftime('%Y-%m-%d %H:%M') if p.fecha_devolucion_esperada else '—' }}</td>
+            <td class="text-muted text-sm">{{ p.fecha_devolucion_real.strftime('%Y-%m-%d %H:%M') if p.fecha_devolucion_real else '—' }}</td>
+            <td><span class="badge badge-{{ p.estado_prestamo }}">{{ p.estado_prestamo|capitalize }}</span></td>
+          </tr>
+        {% else %}
+          <tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:32px">
+            Aún no tienes préstamos registrados. <a href="/cliente/productos" style="color:var(--blue)">Ver productos disponibles</a>
+          </td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+{% endblock %}

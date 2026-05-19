@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Iniciar sesión{% endblock %}
+{% block body %}
+<div class="login-page">
+  <div class="login-card">
+    <div class="login-logo">🔑 PrestaUni</div>
+    <p class="login-sub">Sistema de Préstamos — Universidad Manuela Beltrán</p>
+
+    {% if msg %}
+    <div class="alert alert-{{ 'success' if tipo == 'success' else 'error' }}">
+      {{ msg }}
+    </div>
+    {% endif %}
+
+    <form method="post" action="/login">
+      <div class="form-grid" style="gap:14px">
+        <div class="form-group">
+          <label class="form-label">Correo electrónico</label>
+          <input class="form-control" type="email" name="correo"
+                 placeholder="usuario@umb.edu.co" required autofocus/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Contraseña</label>
+          <input class="form-control" type="password" name="password"
+                 placeholder="••••••••" required/>
+        </div>
+        <button class="btn btn-primary w-full" style="justify-content:center;margin-top:6px">
+          Iniciar sesión
+        </button>
+      </div>
+    </form>
+
+    <p class="login-sep">── o ──</p>
+
+    <a href="/register">
+      <button class="btn btn-ghost w-full" style="justify-content:center">
+        Registrarse como estudiante
+      </button>
+    </a>
+
+    <p class="text-muted text-sm" style="text-align:center;margin-top:24px">
+      © 2026 Universidad Manuela Beltrán · Ingeniería de Software
+    </p>
+  </div>
+</div>
+{% endblock %}

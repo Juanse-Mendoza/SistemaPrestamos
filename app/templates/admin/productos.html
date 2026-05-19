@@ -1,0 +1,707 @@
+{% extends "base.html" %}
+{% block title %}Productos{% endblock %}
+{% block body %}
+<div class="admin-layout">
+  <header class="header">
+    <span class="header-logo">🔑 PrestaUni</span>
+    <span class="header-title">Gestión de Productos</span>
+    <span class="header-spacer"></span>
+    <span class="header-user">{{ usuario.nombre }}</span>
+    <div class="avatar">{{ usuario.nombre[:2]|upper }}</div>
+    <a href="/logout"><button class="btn btn-ghost btn-sm">Salir</button></a>
+  </header>
+
+  <nav class="sidebar" style="display:flex;flex-direction:column">
+    <p class="sidebar-menu-label">MENÚ</p>
+    <a href="/admin/dashboard"><button class="nav-btn">⬛ Dashboard</button></a>
+    <a href="/admin/solicitudes"><button class="nav-btn">✉ Solicitudes
+      {% if solicitudes_count.total %}<span class="nav-badge">{{ solicitudes_count.total }}</span>{% endif %}
+    </button></a>
+    <a href="/admin/multas"><button class="nav-btn">$ Multas
+      {% if multas_count %}<span class="nav-badge">{{ multas_count }}</span>{% endif %}
+    </button></a>
+    <a href="/admin/productos"><button class="nav-btn active">■ Productos</button></a>
+    <a href="/admin/historial"><button class="nav-btn">▤ Historial</button></a>
+    <a href="/admin/usuarios"><button class="nav-btn">◈ Usuarios</button></a>
+    <div style="flex:1"></div>
+    <div class="sidebar-bottom">Rol: Administrador<br/>{{ usuario.correo }}</div>
+  </nav>
+
+  <main class="content">
+    {% if msg %}
+    <div class="alert alert-{{ 'success' if tipo == 'success' else 'error' }}">{{ msg }}</div>
+    {% endif %}
+
+    <div class="section-row">
+      <span class="section-title">Inventario de artículos</span>
+      <a href="/admin/reportes/productos.pdf{% if buscar %}?buscar={{ buscar }}{% endif %}" target="_blank">
+        <button type="button" class="btn btn-ghost btn-sm">📄 Exportar PDF</button>
+      </a>
+      <button class="btn btn-primary btn-sm" onclick="openModal('modal-nuevo')">
+        ➕ Nuevo artículo
+      </button>
+    </div>
+
+    <!-- Buscador -->
+    <form method="get" action="/admin/productos"
+          style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+      <input class="form-control" type="search" name="buscar" value="{{ buscar }}"
+             placeholder="Buscar por nombre, código de barras o código interno..."
+             style="flex:1;min-width:240px;max-width:480px"/>
+      <button type="submit" class="btn btn-primary btn-sm">🔍 Buscar</button>
+      {% if buscar %}
+        <a href="/admin/productos"><button type="button" class="btn btn-ghost btn-sm">✕ Limpiar</button></a>
+        <span class="text-muted text-sm">{{ articulos|length }} resultado{{ 's' if articulos|length != 1 else '' }} para "{{ buscar }}"</span>
+      {% endif %}
+    </form>
+
+    <!-- Tabla de inventario -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Código</th><th>Código barras</th><th>Nombre</th>
+            <th>Categoría</th><th>Estado</th><th>Disponible</th>
+            <th>Total</th><th>Tiempo máx.</th><th>Ubicación</th><th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for a in articulos %}
+          <tr>
+            <td class="text-muted text-sm">{{ a.codigo_interno or '—' }}</td>
+            <td class="text-muted text-sm" style="font-family:monospace">
+              {{ a.codigo_barras or '—' }}</td>
+            <td style="font-weight:500">{{ a.articulo }}</td>
+            <td class="text-muted text-sm">{{ a.categoria or '—' }}</td>
+            <td><span class="badge badge-{{ a.estado }}">{{ a.estado|capitalize }}</span></td>
+            <td>{{ a.stock_disponible }}</td>
+            <td class="text-muted">{{ a.stock_total }}</td>
+            <td class="text-muted text-sm">
+              {% if a.tiempo_maximo_legible %}
+                {{ a.tiempo_maximo_legible }}
+              {% else %}
+                <span title="Sin límite">∞</span>
+              {% endif %}
+            </td>
+            <td class="text-muted text-sm">{{ a.ubicacion or '—' }}</td>
+            <td>
+              <div class="flex gap-2">
+                <button class="btn btn-ghost btn-sm"
+                  onclick="abrirEditarProducto({{ a.articulo_id }},
+                    '{{ a.articulo|replace("'","\\'")|replace('"','\\"') }}',
+                    '{{ (a.descripcion or '')|replace("'","\\'")|replace('"','\\"') }}',
+                    '{{ (a.ubicacion or '')|replace("'","\\'")|replace('"','\\"') }}',
+                    '{{ (a.codigo_barras or '')|replace("'","\\'")|replace('"','\\"') }}',
+                    {{ a.tiempo_maximo_valor or 'null' }},
+                    '{{ a.tiempo_maximo_unidad }}',
+                    '{{ a.estado }}',
+                    {{ a.multa_por_hora_cop or 'null' }})">
+                  Editar
+                </button>
+                <button class="btn btn-warning btn-sm"
+                  onclick="abrirStock({{ a.articulo_id }},
+                    '{{ a.articulo|replace("'","\\'")|replace('"','\\"') }}',
+                    {{ a.stock_total }})">
+                  Stock
+                </button>
+                <button class="btn btn-danger btn-sm"
+                  onclick="abrirBaja({{ a.articulo_id }},
+                    '{{ a.articulo|replace("'","\\'")|replace('"','\\"') }}')">
+                  Baja
+                </button>
+              </div>
+            </td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="10" style="text-align:center;color:var(--text-3);padding:28px">
+              {% if buscar %}No se encontraron artículos para "{{ buscar }}"{% else %}Sin artículos registrados{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MODAL: NUEVO ARTÍCULO (con escáner de código de barras)
+     ═══════════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="modal-nuevo">
+  <div class="modal" style="max-width:540px">
+    <h3 class="modal-title">Nuevo artículo</h3>
+
+    <!-- Tabs: modo escaneo / modo manual -->
+    <div class="scan-tabs">
+      <button class="scan-tab active" id="tab-scan" onclick="cambiarTab('scan')">
+        ▦ Leer código de barras
+      </button>
+      <button class="scan-tab" id="tab-manual" onclick="cambiarTab('manual')">
+        ✏ Ingreso manual
+      </button>
+    </div>
+
+    <form method="post" action="/admin/productos/nuevo" id="form-nuevo">
+
+      <!-- ── SECCIÓN CÓDIGO DE BARRAS ──────────────────────────── -->
+      <div id="seccion-barcode" style="margin-bottom:18px">
+
+        <!-- Estado del escáner -->
+        <div id="barcode-status" class="barcode-status" style="display:none"></div>
+
+        <div class="barcode-input-wrap">
+          <label class="form-label">Código de barras</label>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+            <input class="form-control" id="inp-barcode" name="codigo_barras"
+                   placeholder="Escanee con lector USB o ingrese el código..."
+                   autocomplete="off"
+                   style="font-family:monospace;font-size:15px;letter-spacing:1px"/>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-usb"
+                    onclick="activarModoUSB()" title="Activar modo lector USB">
+              📡 USB
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-camara"
+                    onclick="activarCamara()" title="Escanear con cámara">
+              📷 Cámara
+            </button>
+          </div>
+          <p class="text-muted text-sm" style="margin-top:6px">
+            Con lector USB: conecte el lector y haga clic en el campo. Con cámara: use el botón 📷.
+          </p>
+        </div>
+
+        <!-- Preview cámara -->
+        <div id="camara-container" style="display:none;margin-top:12px">
+          <div style="position:relative;border-radius:8px;overflow:hidden;background:#000">
+            <video id="video-scanner" autoplay playsinline
+                   style="width:100%;max-height:220px;object-fit:cover;display:block"></video>
+            <canvas id="canvas-scanner" style="display:none"></canvas>
+            <!-- Línea de escaneo animada -->
+            <div id="scan-line" style="
+              position:absolute;top:0;left:0;right:0;height:2px;
+              background:linear-gradient(90deg,transparent,var(--red),transparent);
+              animation:scanLine 1.8s linear infinite;"></div>
+            <div style="
+              position:absolute;inset:0;border:2px solid var(--red-soft);
+              border-radius:8px;pointer-events:none;opacity:.5"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:8px">
+            <p class="text-muted text-sm">Apunte la cámara al código de barras</p>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="detenerCamara()">
+              ✕ Cerrar cámara
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── DATOS DEL ARTÍCULO ─────────────────────────────────── -->
+      <div id="seccion-datos">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Nombre del artículo *</label>
+            <input class="form-control" id="inp-nombre" name="nombre" required
+                   placeholder="Ej: Computador Dell Latitude 5420"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Descripción</label>
+            <textarea class="form-control" name="descripcion" rows="2"
+                      placeholder="Especificaciones técnicas, modelo, etc."></textarea>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group">
+              <label class="form-label">Categoría</label>
+              <select class="form-control" name="categoria_id">
+                <option value="">Sin categoría</option>
+                {% for c in categorias %}
+                <option value="{{ c.id }}">{{ c.nombre }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Stock total *</label>
+              <input class="form-control" type="number" name="stock_total"
+                     min="1" value="1" required/>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group">
+              <label class="form-label">Código interno</label>
+              <input class="form-control" name="codigo_interno"
+                     placeholder="EQ-COM-001 (opcional)"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Ubicación</label>
+              <input class="form-control" name="ubicacion"
+                     placeholder="Sala A, Estante 1"/>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tiempo máximo de préstamo</label>
+            <div style="display:flex;gap:8px">
+              <input class="form-control" type="number" name="tiempo_maximo_valor"
+                     min="1" placeholder="Ej: 30" style="flex:1"/>
+              <select class="form-control" name="tiempo_maximo_unidad" style="width:130px">
+                <option value="minutos">Minutos</option>
+                <option value="horas">Horas</option>
+                <option value="dias" selected>Días</option>
+              </select>
+            </div>
+            <p class="text-muted text-sm" style="margin-top:4px">
+              Tiempo máximo de préstamo. Dejar vacío = sin límite.
+            </p>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Multa por hora de retraso (COP)</label>
+            <input class="form-control" type="number" name="multa_por_hora_cop"
+                   min="0" step="100" placeholder="Ej: 1000 — vacío = usa default global (1.000 COP)"/>
+            <p class="text-muted text-sm" style="margin-top:4px">
+              Monto en pesos que se cobra al estudiante por cada hora de retraso al devolver
+              este artículo. Si lo dejas vacío, se usa el valor global por defecto.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost"
+                onclick="cerrarModalNuevo()">Cancelar</button>
+        <button type="submit" class="btn btn-primary" id="btn-guardar">
+          Guardar artículo
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal editar -->
+<div class="modal-backdrop" id="modal-editar">
+  <div class="modal">
+    <h3 class="modal-title">Editar artículo</h3>
+    <form id="edit-form" method="post">
+      <input type="hidden" id="edit-id"/>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Nombre *</label>
+          <input class="form-control" id="edit-nombre" name="nombre" required/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Descripción</label>
+          <textarea class="form-control" id="edit-desc" name="descripcion" rows="2"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Código de barras</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="form-control" id="edit-barcode" name="codigo_barras"
+                   placeholder="Escanee con lector USB o ingrese..."
+                   autocomplete="off"
+                   style="font-family:monospace;letter-spacing:1px"/>
+            <button type="button" class="btn btn-ghost btn-sm" id="edit-btn-camara"
+                    onclick="activarCamaraEdit()" title="Escanear con cámara">
+              📷
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm"
+                    onclick="document.getElementById('edit-barcode').value=''" title="Limpiar código">
+              ✕
+            </button>
+          </div>
+          <div id="edit-barcode-status" class="barcode-status" style="display:none;margin-top:8px"></div>
+          <div id="edit-camara-container" style="display:none;margin-top:10px">
+            <div style="position:relative;border-radius:8px;overflow:hidden;background:#000">
+              <video id="edit-video-scanner" autoplay playsinline
+                     style="width:100%;max-height:200px;object-fit:cover;display:block"></video>
+              <div style="position:absolute;top:0;left:0;right:0;height:2px;
+                          background:linear-gradient(90deg,transparent,var(--red),transparent);
+                          animation:scanLine 1.8s linear infinite"></div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;margin-top:6px">
+              <button type="button" class="btn btn-ghost btn-sm" onclick="detenerCamaraEdit()">
+                ✕ Cerrar cámara
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ubicación</label>
+          <input class="form-control" id="edit-ubic" name="ubicacion"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tiempo máximo de préstamo</label>
+          <div style="display:flex;gap:8px">
+            <input class="form-control" type="number" id="edit-tiempo-max-valor"
+                   name="tiempo_maximo_valor" min="1"
+                   placeholder="Ej: 30 — vacío = sin límite" style="flex:1"/>
+            <select class="form-control" id="edit-tiempo-max-unidad"
+                    name="tiempo_maximo_unidad" style="width:130px">
+              <option value="minutos">Minutos</option>
+              <option value="horas">Horas</option>
+              <option value="dias">Días</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Estado del artículo</label>
+          <select class="form-control" id="edit-estado" name="estado">
+            <option value="disponible">Disponible</option>
+            <option value="mantenimiento">En mantenimiento (no se puede prestar)</option>
+          </select>
+          <p class="text-muted text-sm" style="margin-top:4px">
+            Cuando está en mantenimiento, los estudiantes lo ven pero no pueden solicitarlo.
+            Para retirar permanentemente usa el botón "Baja".
+          </p>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Multa por hora de retraso (COP)</label>
+          <input class="form-control" type="number" id="edit-multa-hora"
+                 name="multa_por_hora_cop" min="0" step="100"
+                 placeholder="Vacío = usa default global (1.000 COP)"/>
+          <p class="text-muted text-sm" style="margin-top:4px">
+            Tarifa específica de este artículo. Si lo dejas vacío, se usará el valor global.
+          </p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost"
+                onclick="cerrarEditar()">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar cambios</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal stock -->
+<div class="modal-backdrop" id="modal-stock">
+  <div class="modal">
+    <h3 class="modal-title">Actualizar stock</h3>
+    <p class="text-muted text-sm" style="margin-bottom:16px">
+      Artículo: <strong id="stock-nombre"></strong><br/>
+      Stock actual: <strong id="stock-actual"></strong>
+    </p>
+    <form id="stock-form" method="post">
+      <div class="form-group">
+        <label class="form-label">Nuevo stock total</label>
+        <input class="form-control" id="stock-nuevo" type="number"
+               name="nuevo_stock" min="0" required/>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost"
+                onclick="closeModal('modal-stock')">Cancelar</button>
+        <button type="submit" class="btn btn-warning">Actualizar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal baja -->
+<div class="modal-backdrop" id="modal-baja">
+  <div class="modal">
+    <h3 class="modal-title" style="color:var(--red)">Dar de baja artículo</h3>
+    <p class="text-muted text-sm" style="margin-bottom:16px">
+      Artículo: <strong id="baja-nombre"></strong><br/>
+      Esta acción no se puede deshacer.
+    </p>
+    <form id="baja-form" method="post">
+      <div class="form-group">
+        <label class="form-label">Motivo de baja *</label>
+        <textarea class="form-control" name="motivo" rows="2" required
+                  placeholder="Describa el motivo..."></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost"
+                onclick="closeModal('modal-baja')">Cancelar</button>
+        <button type="submit" class="btn btn-danger">Confirmar baja</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+/* Tabs del modal */
+.scan-tabs { display:flex; gap:0; margin-bottom:18px;
+             border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+.scan-tab  { flex:1; padding:9px 12px; background:transparent; border:none;
+             color:var(--text-2); cursor:pointer; font-size:13px;
+             transition:background .15s, color .15s; }
+.scan-tab.active { background:var(--red); color:#fff; font-weight:600; }
+.scan-tab:hover:not(.active) { background:var(--bg-dark); }
+
+/* Status del escáner */
+.barcode-status { padding:10px 14px; border-radius:6px; font-size:13px;
+                  font-weight:600; margin-bottom:12px; }
+.barcode-status.escuchando { background:rgba(184,92,92,.15);
+  color:var(--red-soft); border:1px dashed var(--red-soft);
+  animation: pulso .9s ease-in-out infinite alternate; }
+.barcode-status.detectado { background:rgba(102,187,106,.15);
+  color:#81c784; border:1px solid #66bb6a; }
+.barcode-status.duplicado { background:rgba(255,167,38,.15);
+  color:#ffa726; border:1px solid #ffa726; }
+
+@keyframes pulso { from { opacity:.7; } to { opacity:1; } }
+@keyframes scanLine {
+  0%   { top:0; }
+  100% { top:100%; }
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Variables globales ────────────────────────────────────────────────────────
+let streamCamara = null;
+let scanInterval = null;
+let modoActual = 'scan';  // 'scan' | 'manual'
+let usbBuffer = '';
+let usbTimer = null;
+
+// ── Tabs ─────────────────────────────────────────────────────────────────────
+function cambiarTab(modo) {
+  modoActual = modo;
+  document.getElementById('tab-scan').classList.toggle('active', modo === 'scan');
+  document.getElementById('tab-manual').classList.toggle('active', modo === 'manual');
+  document.getElementById('seccion-barcode').style.display = modo === 'scan' ? '' : 'none';
+
+  if (modo === 'scan') {
+    setTimeout(() => document.getElementById('inp-barcode').focus(), 100);
+  } else {
+    detenerCamara();
+    setTimeout(() => document.getElementById('inp-nombre').focus(), 100);
+  }
+}
+
+function cerrarModalNuevo() {
+  detenerCamara();
+  closeModal('modal-nuevo');
+  document.getElementById('form-nuevo').reset();
+  ocultarStatus();
+}
+
+// ── Al abrir el modal ─────────────────────────────────────────────────────────
+const backdrop = document.getElementById('modal-nuevo');
+backdrop.addEventListener('click', e => {
+  if (e.target === backdrop) cerrarModalNuevo();
+});
+
+// Override del openModal para 'modal-nuevo'
+const _openOriginal = window.openModal;
+window.openModal = function(id) {
+  _openOriginal(id);
+  if (id === 'modal-nuevo') {
+    cambiarTab('scan');
+  }
+};
+
+// ── Modo lector USB ───────────────────────────────────────────────────────────
+function activarModoUSB() {
+  const inp = document.getElementById('inp-barcode');
+  inp.focus();
+  mostrarStatus('escuchando', '📡 Lector USB activo — escanee ahora el código de barras...');
+  inp.select();
+}
+
+// Detección de entrada rápida de lector USB (escribe todo en < 100ms)
+const inpBarcode = document.getElementById('inp-barcode');
+inpBarcode.addEventListener('keydown', () => {
+  clearTimeout(usbTimer);
+  usbTimer = setTimeout(() => {
+    const codigo = inpBarcode.value.trim();
+    if (codigo.length >= 4) {
+      verificarBarcode(codigo);
+    }
+  }, 150);  // después de 150ms sin teclas = fin de escaneo
+});
+
+// ── Verificar si el barcode ya existe ─────────────────────────────────────────
+function verificarBarcode(codigo) {
+  fetch(`/admin/api/buscar-barcode/${encodeURIComponent(codigo)}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.existe) {
+        mostrarStatus('duplicado',
+          `⚠ El código ${codigo} ya está registrado: "${data.articulo.articulo}" (${data.articulo.estado})`
+        );
+      } else {
+        mostrarStatus('detectado', `✓ Código ${codigo} listo para registrar`);
+        if (modoActual === 'scan') {
+          document.getElementById('inp-nombre').focus();
+        }
+      }
+    })
+    .catch(() => {});
+}
+
+function mostrarStatus(tipo, texto) {
+  const el = document.getElementById('barcode-status');
+  el.className = `barcode-status ${tipo}`;
+  el.textContent = texto;
+  el.style.display = 'block';
+}
+
+function ocultarStatus() {
+  document.getElementById('barcode-status').style.display = 'none';
+}
+
+// ── Escáner por cámara (BarcodeDetector API) ──────────────────────────────────
+async function activarCamara() {
+  const container = document.getElementById('camara-container');
+
+  if (!('BarcodeDetector' in window)) {
+    mostrarStatus('duplicado',
+      '⚠ Su navegador no soporta el escáner de cámara. Use Chrome/Edge actualizado o el lector USB.'
+    );
+    return;
+  }
+
+  try {
+    streamCamara = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 } }
+    });
+    const video = document.getElementById('video-scanner');
+    video.srcObject = streamCamara;
+    container.style.display = 'block';
+    document.getElementById('btn-camara').textContent = '⏹ Detener';
+    document.getElementById('btn-camara').onclick = detenerCamara;
+
+    const detector = new BarcodeDetector({
+      formats: ['code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'qr_code', 'data_matrix']
+    });
+
+    mostrarStatus('escuchando', '📷 Cámara activa — apunte al código de barras...');
+
+    scanInterval = setInterval(async () => {
+      try {
+        const barcodes = await detector.detect(video);
+        if (barcodes.length > 0) {
+          const codigo = barcodes[0].rawValue;
+          document.getElementById('inp-barcode').value = codigo;
+          detenerCamara();
+          verificarBarcode(codigo);
+        }
+      } catch (_) {}
+    }, 300);
+
+  } catch (err) {
+    mostrarStatus('duplicado',
+      '⚠ No se pudo acceder a la cámara. Verifique los permisos del navegador.'
+    );
+  }
+}
+
+function detenerCamara() {
+  clearInterval(scanInterval);
+  if (streamCamara) {
+    streamCamara.getTracks().forEach(t => t.stop());
+    streamCamara = null;
+  }
+  document.getElementById('camara-container').style.display = 'none';
+  document.getElementById('btn-camara').textContent = '📷 Cámara';
+  document.getElementById('btn-camara').onclick = activarCamara;
+}
+
+// ── Validación antes de enviar ────────────────────────────────────────────────
+document.getElementById('form-nuevo').addEventListener('submit', function(e) {
+  const nombre = document.getElementById('inp-nombre').value.trim();
+  if (!nombre) {
+    e.preventDefault();
+    document.getElementById('inp-nombre').focus();
+    mostrarStatus('duplicado', '⚠ El nombre del artículo es obligatorio.');
+    cambiarTab('manual');
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// EDITAR ARTÍCULO — cámara y verificación de código de barras
+// ═════════════════════════════════════════════════════════════════════════════
+let editStream = null;
+let editScanInterval = null;
+let editUsbTimer = null;
+const editIdCurrent = () => document.getElementById('edit-id').value;
+
+function cerrarEditar() {
+  detenerCamaraEdit();
+  closeModal('modal-editar');
+}
+
+function mostrarStatusEdit(tipo, texto) {
+  const el = document.getElementById('edit-barcode-status');
+  el.className = `barcode-status ${tipo}`;
+  el.textContent = texto;
+  el.style.display = 'block';
+}
+
+function verificarBarcodeEdit(codigo) {
+  if (!codigo) return;
+  fetch(`/admin/api/buscar-barcode/${encodeURIComponent(codigo)}`)
+    .then(r => r.json())
+    .then(data => {
+      const idActual = parseInt(editIdCurrent());
+      if (data.existe && data.articulo.articulo_id !== idActual) {
+        mostrarStatusEdit('duplicado',
+          `⚠ El código ${codigo} ya pertenece a "${data.articulo.articulo}". No se podrá guardar.`);
+      } else if (data.existe) {
+        mostrarStatusEdit('detectado', `✓ Código ${codigo} (ya asignado a este artículo)`);
+      } else {
+        mostrarStatusEdit('detectado', `✓ Código ${codigo} disponible`);
+      }
+    })
+    .catch(() => {});
+}
+
+// Detección de entrada rápida (lector USB) en el input de edición
+const editBarcodeInp = document.getElementById('edit-barcode');
+if (editBarcodeInp) {
+  editBarcodeInp.addEventListener('keydown', () => {
+    clearTimeout(editUsbTimer);
+    editUsbTimer = setTimeout(() => {
+      const codigo = editBarcodeInp.value.trim();
+      if (codigo.length >= 4) verificarBarcodeEdit(codigo);
+    }, 150);
+  });
+}
+
+async function activarCamaraEdit() {
+  const container = document.getElementById('edit-camara-container');
+  if (!('BarcodeDetector' in window)) {
+    mostrarStatusEdit('duplicado',
+      '⚠ Su navegador no soporta el escáner de cámara. Use Chrome/Edge o lector USB.');
+    return;
+  }
+  try {
+    editStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 } }
+    });
+    const video = document.getElementById('edit-video-scanner');
+    video.srcObject = editStream;
+    container.style.display = 'block';
+
+    const detector = new BarcodeDetector({
+      formats: ['code_128','code_39','ean_13','ean_8','upc_a','qr_code','data_matrix']
+    });
+    mostrarStatusEdit('escuchando', '📷 Cámara activa — apunte al código de barras...');
+
+    editScanInterval = setInterval(async () => {
+      try {
+        const barcodes = await detector.detect(video);
+        if (barcodes.length > 0) {
+          const codigo = barcodes[0].rawValue;
+          document.getElementById('edit-barcode').value = codigo;
+          detenerCamaraEdit();
+          verificarBarcodeEdit(codigo);
+        }
+      } catch (_) {}
+    }, 300);
+  } catch (err) {
+    mostrarStatusEdit('duplicado',
+      '⚠ No se pudo acceder a la cámara. Verifique los permisos del navegador.');
+  }
+}
+
+function detenerCamaraEdit() {
+  clearInterval(editScanInterval);
+  if (editStream) {
+    editStream.getTracks().forEach(t => t.stop());
+    editStream = null;
+  }
+  document.getElementById('edit-camara-container').style.display = 'none';
+}
+</script>
+{% endblock %}

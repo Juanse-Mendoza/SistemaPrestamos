@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block body %}
+<div class="admin-layout">
+
+  <!-- HEADER -->
+  <header class="header">
+    <span class="header-logo">🔑 PrestaUni</span>
+    <span class="header-title">Panel General</span>
+    <span class="header-spacer"></span>
+    <span class="header-user">{{ usuario.nombre }}</span>
+    <div class="avatar">{{ usuario.nombre[:2]|upper }}</div>
+    <a href="/logout"><button class="btn btn-ghost btn-sm">Salir</button></a>
+  </header>
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar" style="display:flex;flex-direction:column">
+    <p class="sidebar-menu-label">MENÚ</p>
+    <a href="/admin/dashboard">
+      <button class="nav-btn active">⬛ Dashboard</button></a>
+    <a href="/admin/solicitudes">
+      <button class="nav-btn">✉ Solicitudes
+        {% if solicitudes_count.total %}<span class="nav-badge">{{ solicitudes_count.total }}</span>{% endif %}
+      </button></a>
+    <a href="/admin/multas">
+      <button class="nav-btn">$ Multas
+        {% if multas_count %}<span class="nav-badge">{{ multas_count }}</span>{% endif %}
+      </button></a>
+    <a href="/admin/productos">
+      <button class="nav-btn">■ Productos</button></a>
+    <a href="/admin/historial">
+      <button class="nav-btn">▤ Historial</button></a>
+    <a href="/admin/usuarios">
+      <button class="nav-btn">◈ Usuarios</button></a>
+    <div style="flex:1"></div>
+    <div class="sidebar-bottom">Rol: Administrador<br/>{{ usuario.correo }}</div>
+  </nav>
+
+  <!-- CONTENIDO -->
+  <main class="content">
+    {% if msg %}
+    <div class="alert alert-{{ 'success' if tipo == 'success' else 'error' }}">{{ msg }}</div>
+    {% endif %}
+
+    <div class="section-row">
+      <span class="section-title">Panel General</span>
+      <a href="/admin/dashboard"><button class="btn btn-ghost btn-sm">↻ Actualizar</button></a>
+      <button class="btn btn-primary btn-sm" onclick="openModal('modal-nuevo-prestamo')">
+        ➕ Nuevo préstamo
+      </button>
+    </div>
+
+    <!-- Métricas -->
+    <div class="metrics-row">
+      <div class="card metric-card blue">
+        <div class="metric-label">Total préstamos</div>
+        <div class="metric-value">{{ metricas.total_prestamos or 0 }}</div>
+        <div class="metric-sub">últimos 30 días</div>
+      </div>
+      <div class="card metric-card orange">
+        <div class="metric-label">Préstamos activos</div>
+        <div class="metric-value">{{ metricas.prestamos_activos or 0 }}</div>
+        <div class="metric-sub">en curso</div>
+      </div>
+      <div class="card metric-card red">
+        <div class="metric-label">Vencidos</div>
+        <div class="metric-value">{{ metricas.prestamos_vencidos or 0 }}</div>
+        <div class="metric-sub">sin devolver</div>
+      </div>
+      <div class="card metric-card green">
+        <div class="metric-label">Devueltos</div>
+        <div class="metric-value">{{ metricas.prestamos_devueltos or 0 }}</div>
+        <div class="metric-sub">completados</div>
+      </div>
+    </div>
+
+    <!-- Tabla préstamos activos -->
+    <p style="font-size:15px;font-weight:600;margin-bottom:12px">Préstamos en curso</p>
+
+    <!-- Búsqueda rápida por código de barras -->
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:18px">🔎</span>
+        <input class="form-control" type="search" id="busqueda-barcode"
+               placeholder="Escanee con lector USB o escriba el código de barras del artículo..."
+               autocomplete="off"
+               style="flex:1;min-width:280px;font-family:monospace;letter-spacing:1px"/>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);cursor:pointer">
+          <input type="checkbox" id="autodevolver"/> Abrir devolución automáticamente
+        </label>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('busqueda-barcode').value='';document.getElementById('busqueda-status').style.display='none'">
+          ✕
+        </button>
+      </div>
+      <div id="busqueda-status" class="barcode-status" style="display:none;margin-top:10px"></div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Estudiante</th><th>Cédula</th>
+            <th>Artículo</th><th>Fecha préstamo</th><th>Devolución esperada</th>
+            <th>Estado</th><th>Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for p in prestamos %}
+          {% set vencido = p.estado_tiempo == 'VENCIDO' %}
+          <tr data-prestamo-id="{{ p.prestamo_id }}" data-articulo="{{ p.articulo|replace('"','&quot;') }}" data-codigo="{{ p.codigo_prestamo }}">
+            <td class="text-muted text-sm">
+              {{ p.codigo_prestamo }}
+              {% if p.codigo_solicitud %}
+                <div style="font-size:10px;color:var(--blue);margin-top:2px"
+                     title="Parte de una solicitud con varios artículos">
+                  🔗 {{ p.codigo_solicitud }}
+                </div>
+              {% endif %}
+            </td>
+            <td>{{ p.usuario_nombre }}</td>
+            <td class="text-muted text-sm">{{ p.numero_documento or '—' }}</td>
+            <td>{{ p.articulo }}</td>
+            <td class="text-muted text-sm">{{ p.fecha_prestamo.strftime('%Y-%m-%d %H:%M') if p.fecha_prestamo else '—' }}</td>
+            <td class="text-muted text-sm">{{ p.fecha_devolucion_esperada.strftime('%Y-%m-%d %H:%M') if p.fecha_devolucion_esperada else '—' }}</td>
+            <td>
+              {% if vencido %}
+                <span class="badge badge-vencido">VENCIDO</span>
+                {% if p.dias_retraso and p.dias_retraso > 0 %}
+                  <div class="text-muted text-sm" style="margin-top:4px">+{{ p.dias_retraso }} día{{ 's' if p.dias_retraso != 1 else '' }} de retraso</div>
+                {% endif %}
+              {% else %}
+                <span class="badge badge-activo">A TIEMPO</span>
+              {% endif %}
+            </td>
+            <td>
+              <button class="btn {{ 'btn-warning' if vencido else 'btn-success' }} btn-sm"
+                onclick="abrirDevolucion({{ p.prestamo_id }},
+                  '{{ p.codigo_prestamo }}',
+                  '{{ p.articulo|replace("'","\\'")|replace('"','\\"') }}',
+                  {{ 'true' if vencido else 'false' }},
+                  '{{ p.usuario_correo or "" }}')">
+                {{ 'Recibir con demora' if vencido else 'Marcar devolución de insumo' }}
+              </button>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:24px">Sin préstamos en curso</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<!-- Modal devolución -->
+<div class="modal-backdrop" id="modal-devolucion">
+  <div class="modal modal-lg">
+    <h3 class="modal-title">Registrar devolución</h3>
+    <p class="text-muted text-sm" style="margin-bottom:12px">
+      Código: <strong id="dev-codigo"></strong><br/>
+      Artículo: <strong id="dev-articulo"></strong>
+    </p>
+    <div id="dev-aviso-tarde" class="alert alert-error" style="display:none;margin-bottom:12px">
+      Este préstamo está <strong>vencido</strong>. Se registrará como devolución con demora.
+    </div>
+    <form id="dev-form" method="post">
+      <input type="hidden" name="redirigir" value="dashboard"/>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Fecha y hora de la devolución</label>
+          <input class="form-control" type="datetime-local"
+                 name="fecha_devolucion" id="dev-fecha" required/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Estado del artículo al recibirlo</label>
+          <select class="form-control" name="estado_articulo" required>
+            <option value="disponible">Disponible (buen estado)</option>
+            <option value="mantenimiento">Requiere mantenimiento</option>
+            <option value="baja">Inutilizable — dar de baja</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-top:8px">
+        <label class="form-label">Checklist de revisión del artículo</label>
+        <div class="checklist">
+          <label><input type="checkbox" name="checklist" value="funciona"/> Funcionamiento correcto</label>
+          <label><input type="checkbox" name="checklist" value="sin_danos"/> Sin daños visibles ni golpes</label>
+          <label><input type="checkbox" name="checklist" value="accesorios"/> Accesorios completos</label>
+          <label><input type="checkbox" name="checklist" value="empaque"/> Empaque / embalaje en buen estado</label>
+          <label><input type="checkbox" name="checklist" value="limpieza"/> Limpieza adecuada</label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Observaciones adicionales</label>
+        <textarea class="form-control" name="observaciones" rows="2"
+                  placeholder="Detalles opcionales sobre la devolución..."></textarea>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('modal-devolucion')">Cancelar</button>
+        <button type="submit" class="btn btn-success">Confirmar devolución</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal nuevo préstamo -->
+<div class="modal-backdrop" id="modal-nuevo-prestamo">
+  <div class="modal modal-lg">
+    <h3 class="modal-title">Registrar nuevo préstamo</h3>
+    <form method="post" action="/admin/prestamos/nuevo" id="np-form">
+      <div class="form-grid">
+
+        <!-- Estudiante con búsqueda por código de barras -->
+        <div class="form-group">
+          <label class="form-label">Estudiante</label>
+          <div style="display:flex;gap:8px;margin-bottom:6px">
+            <input class="form-control" type="text" id="np-bc-usuario"
+                   placeholder="📷 Escanear código de barras del carnet..."
+                   autocomplete="off"
+                   style="font-family:monospace;letter-spacing:1px"/>
+          </div>
+          <input class="form-control" name="usuario_correo" id="np-correo" type="email"
+                 placeholder="o escriba el correo: correo@academia.umb.edu.co" required/>
+          <div id="np-usr-info" class="text-muted text-sm" style="margin-top:4px"></div>
+        </div>
+
+        <!-- Artículo 1 (obligatorio) -->
+        <div class="form-group" style="background:rgba(59,125,221,.05);padding:12px;border-radius:8px;border:1px solid var(--border)">
+          <label class="form-label" style="font-weight:700">📦 Artículo 1 (obligatorio)</label>
+          <div style="display:flex;gap:8px;margin-bottom:6px">
+            <input class="form-control" type="text" id="np-bc-articulo"
+                   placeholder="📷 Escanear código de barras..."
+                   autocomplete="off" data-target="1"
+                   style="font-family:monospace;letter-spacing:1px"/>
+          </div>
+          <select class="form-control" name="articulo_id_1" id="np-articulo" data-target="1" required>
+            <option value="">o seleccionar de la lista...</option>
+          </select>
+          <div id="np-art-info" class="text-muted text-sm" style="margin-top:4px"></div>
+          <label class="form-label" style="margin-top:10px">Fecha de devolución</label>
+          <input class="form-control" type="datetime-local" name="fecha_devolucion_1" required/>
+        </div>
+
+        <!-- Artículo 2 (opcional) -->
+        <div class="form-group" id="art2-container" style="background:rgba(245,158,11,.05);padding:12px;border-radius:8px;border:1px dashed var(--border);display:none">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <label class="form-label" style="margin:0;font-weight:700">📦 Artículo 2 (opcional)</label>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="quitarArticulo2()">✕ Quitar</button>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:6px">
+            <input class="form-control" type="text" id="np-bc-articulo-2"
+                   placeholder="📷 Escanear código de barras..."
+                   autocomplete="off" data-target="2"
+                   style="font-family:monospace;letter-spacing:1px"/>
+          </div>
+          <select class="form-control" name="articulo_id_2" id="np-articulo-2" data-target="2">
+            <option value="">o seleccionar de la lista...</option>
+          </select>
+          <div id="np-art-info-2" class="text-muted text-sm" style="margin-top:4px"></div>
+          <label class="form-label" style="margin-top:10px">Fecha de devolución</label>
+          <input class="form-control" type="datetime-local" name="fecha_devolucion_2"/>
+        </div>
+
+        <button type="button" id="btn-agregar-art2" class="btn btn-ghost btn-sm" style="align-self:flex-start"
+                onclick="agregarArticulo2()">
+          ➕ Agregar segundo artículo
+        </button>
+
+        <div class="form-group">
+          <label class="form-label">Observaciones</label>
+          <textarea class="form-control" name="observaciones" rows="2"
+                    placeholder="Opcional — aplica a ambos artículos..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('modal-nuevo-prestamo')">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Registrar préstamo</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+// Cargar artículos disponibles en el select del modal
+fetch('/admin/api/articulos-disponibles').then(r=>r.json()).then(data=>{
+  const sel = document.querySelector('[name="articulo_id"]');
+  data.forEach(a => {
+    const opt = document.createElement('option');
+    opt.value = a.articulo_id;
+    opt.textContent = `${a.articulo} (disp: ${a.stock_disponible})`;
+    sel.appendChild(opt);
+  });
+}).catch(()=>{});
+// Fecha mínima ahora
+const fi = document.querySelector('[name="fecha_devolucion"]');
+if(fi){ fi.min = new Date().toISOString().slice(0,16); }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BÚSQUEDA RÁPIDA DE PRÉSTAMO POR CÓDIGO DE BARRAS
+// ═══════════════════════════════════════════════════════════════════════════
+const busqInp    = document.getElementById('busqueda-barcode');
+const busqStatus = document.getElementById('busqueda-status');
+let busqTimer = null;
+
+function mostrarBusqueda(tipo, texto) {
+  busqStatus.className = `barcode-status ${tipo}`;
+  busqStatus.textContent = texto;
+  busqStatus.style.display = 'block';
+}
+
+// Beep corto cuando no se encuentra (audio + shake visual)
+function alertaNoEncontrado() {
+  // Beep usando Web Audio API (no requiere archivo)
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = 220;
+    gain.gain.value = 0.15;
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start();
+    osc.frequency.setValueAtTime(220, ctx.currentTime);
+    osc.frequency.setValueAtTime(180, ctx.currentTime + 0.12);
+    osc.stop(ctx.currentTime + 0.25);
+  } catch (_) {}
+  // Shake del input
+  busqInp.classList.add('input-shake');
+  setTimeout(() => busqInp.classList.remove('input-shake'), 500);
+}
+
+function resaltarFila(prestamoId) {
+  // Quitar resalte previo
+  document.querySelectorAll('tr.fila-resaltada').forEach(tr => {
+    tr.classList.remove('fila-resaltada');
+  });
+  const fila = document.querySelector(`tr[data-prestamo-id="${prestamoId}"]`);
+  if (!fila) return null;
+  fila.classList.add('fila-resaltada');
+  fila.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  return fila;
+}
+
+async function buscarPorBarcode(codigo) {
+  if (!codigo) return;
+  mostrarBusqueda('escuchando', `Buscando préstamo para "${codigo}"...`);
+  try {
+    const r = await fetch(`/admin/api/buscar-prestamo-barcode/${encodeURIComponent(codigo)}`);
+    const data = await r.json();
+    if (!data.encontrado) {
+      const icono = data.razon === 'codigo_inexistente' ? '❌' : '⚠';
+      mostrarBusqueda('duplicado', icono + ' ' + (data.mensaje || 'No se tienen reservas con ese código de barras.'));
+      alertaNoEncontrado();
+      busqInp.select();  // selecciona el texto para que el siguiente escaneo lo reemplace
+      return;
+    }
+    const p = data.prestamo;
+    const fila = resaltarFila(p.prestamo_id);
+    if (!fila) {
+      mostrarBusqueda('duplicado',
+        `El préstamo ${p.codigo_prestamo} existe pero no está visible en la tabla actual.`);
+      return;
+    }
+    mostrarBusqueda('detectado',
+      `✓ Préstamo ${p.codigo_prestamo} · ${p.estudiante} · ${p.articulo} (${p.estado.toUpperCase()})`);
+
+    // Si la opción está activa, abrir el modal de devolución
+    if (document.getElementById('autodevolver').checked) {
+      const vencido = p.estado === 'vencido';
+      setTimeout(() => abrirDevolucion(p.prestamo_id, p.codigo_prestamo, p.articulo, vencido), 500);
+    }
+    // Limpiar input para próximo escaneo
+    busqInp.value = '';
+    busqInp.focus();
+  } catch (e) {
+    mostrarBusqueda('duplicado', '⚠ Error al consultar el servidor.');
+  }
+}
+
+// Detección de entrada rápida (lector USB): tras 150ms sin teclas, dispara
+busqInp.addEventListener('keydown', (e) => {
+  clearTimeout(busqTimer);
+  // Si presiona Enter, busca inmediato
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const codigo = busqInp.value.trim();
+    if (codigo) buscarPorBarcode(codigo);
+    return;
+  }
+  busqTimer = setTimeout(() => {
+    const codigo = busqInp.value.trim();
+    if (codigo.length >= 4) buscarPorBarcode(codigo);
+  }, 200);
+});
+</script>
+{% endblock %}

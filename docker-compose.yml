@@ -1,0 +1,143 @@
+# =============================================================================
+# SISTEMA TRANSACCIONAL DE PRÉSTAMOS UNIVERSITARIOS — Docker Compose
+# =============================================================================
+# Servicios:
+#   postgres  — PostgreSQL 16 (base de datos principal)
+#   sqlserver — SQL Server 2022 (réplica)
+#   sync      — Sincronización PG → SQL Server cada 5 min
+#   web       — Aplicación web FastAPI (acceso: http://localhost:8000)
+#
+# Uso rápido:
+#   docker compose up -d --build    → Construir e iniciar todo
+#   docker compose logs -f web      → Ver logs de la app
+#   docker compose down             → Detener (conserva datos)
+#   docker compose down -v          → Detener y borrar datos
+# =============================================================================
+
+services:
+
+  # ── PostgreSQL — base de datos principal ─────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: prestamos_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: prestamos_umb
+      POSTGRES_HOST_AUTH_METHOD: trust
+      TZ: America/Bogota
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sh:/docker-entrypoint-initdb.d/00_init.sh:ro
+      - ./database:/sql-init:ro
+    networks:
+      - prestamos_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d prestamos_umb"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # ── SQL Server — réplica ─────────────────────────────────────────────────────
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: prestamos_sqlserver
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "SqlServer2026"
+      MSSQL_PID: Developer
+      TZ: America/Bogota
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+      - ./docker/sqlserver:/sqlserver-init:ro
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        /opt/mssql/bin/sqlservr &
+        /sqlserver-init/entrypoint.sh
+        wait
+    networks:
+      - prestamos_net
+    healthcheck:
+      test: >
+        /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "SqlServer2026"
+        -Q "SELECT 1" -C -l 5 || exit 1
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 45s
+
+  # ── Sincronización PG → SQL Server ──────────────────────────────────────────
+  sync:
+    build:
+      context: ./docker/sync
+    container_name: prestamos_sync
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      sqlserver:
+        condition: service_healthy
+    environment:
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_DB: prestamos_umb
+      PG_USER: postgres
+      PG_PASSWORD: postgres
+      SS_HOST: sqlserver
+      SS_PORT: 1433
+      SS_DB: prestamos_umb_copia
+      SS_USER: sa
+      SS_PASSWORD: "SqlServer2026"
+      SYNC_INTERVAL_SECONDS: 300
+      TZ: America/Bogota
+    networks:
+      - prestamos_net
+
+  # ── Aplicación web FastAPI ───────────────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: prestamos_web
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: prestamos_umb
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      JWT_SECRET_KEY: PrestaUni_UMB_JWT_Secret_2026
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRATION_HOURS: 8
+      TZ: America/Bogota
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app:ro        # hot-reload en desarrollo
+    networks:
+      - prestamos_net
+
+# ── Volúmenes ──────────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    name: prestamos_postgres_data
+  sqlserver_data:
+    name: prestamos_sqlserver_data
+
+# ── Red interna ────────────────────────────────────────────────────────────────
+networks:
+  prestamos_net:
+    name: prestamos_network
+    driver: bridge

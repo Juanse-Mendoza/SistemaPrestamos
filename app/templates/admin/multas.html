@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}Multas{% endblock %}
+{% block body %}
+<div class="admin-layout">
+  <header class="header">
+    <span class="header-logo">🔑 PrestaUni</span>
+    <span class="header-title">Multas por retraso</span>
+    <span class="header-spacer"></span>
+    <span class="header-user">{{ usuario.nombre }}</span>
+    <div class="avatar">{{ usuario.nombre[:2]|upper }}</div>
+    <a href="/logout"><button class="btn btn-ghost btn-sm">Salir</button></a>
+  </header>
+
+  <nav class="sidebar" style="display:flex;flex-direction:column">
+    <p class="sidebar-menu-label">MENÚ</p>
+    <a href="/admin/dashboard"><button class="nav-btn">⬛ Dashboard</button></a>
+    <a href="/admin/solicitudes"><button class="nav-btn">✉ Solicitudes
+      {% if solicitudes_count.total %}<span class="nav-badge">{{ solicitudes_count.total }}</span>{% endif %}
+    </button></a>
+    <a href="/admin/multas"><button class="nav-btn active">$ Multas
+      {% if multas %}<span class="nav-badge">{{ multas|length }}</span>{% endif %}
+    </button></a>
+    <a href="/admin/productos"><button class="nav-btn">■ Productos</button></a>
+    <a href="/admin/historial"><button class="nav-btn">▤ Historial</button></a>
+    <a href="/admin/usuarios"><button class="nav-btn">◈ Usuarios</button></a>
+    <div style="flex:1"></div>
+    <div class="sidebar-bottom">Rol: Administrador<br/>{{ usuario.correo }}</div>
+  </nav>
+
+  <main class="content">
+    {% if msg %}
+    <div class="alert alert-{{ 'success' if tipo == 'success' else 'error' }}">{{ msg }}</div>
+    {% endif %}
+
+    <div class="section-row">
+      <span class="section-title">Multas pendientes</span>
+      <a href="/admin/multas"><button class="btn btn-ghost btn-sm">↻ Actualizar</button></a>
+    </div>
+
+    <p class="text-muted text-sm" style="margin-bottom:16px">
+      Las multas se calculan automáticamente a razón de
+      <strong>$ 1.000 COP por hora</strong> de retraso. Para registrar el pago,
+      el estudiante debe acercarse físicamente al centro administrativo.
+    </p>
+
+    {% if not multas %}
+    <div class="card" style="padding:32px;text-align:center;color:var(--text-3)">
+      <div style="font-size:32px;margin-bottom:8px">✓</div>
+      <div style="font-size:15px;font-weight:600;color:var(--text-1)">No hay multas pendientes</div>
+    </div>
+    {% else %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Código préstamo</th><th>Estudiante</th><th>Documento</th>
+            <th>Artículo</th><th>Dev. esperada</th>
+            <th>Horas</th><th>Tarifa/h</th>
+            <th>Total</th><th>Pagado</th><th>Saldo</th>
+            <th>Estado</th><th>Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for m in multas %}
+          <tr>
+            <td class="text-muted text-sm">{{ m.codigo_prestamo }}</td>
+            <td>{{ m.usuario_nombre }}<br/><span class="text-muted text-sm">{{ m.usuario_correo }}</span></td>
+            <td class="text-muted text-sm">{{ m.numero_documento or '—' }}</td>
+            <td>{{ m.articulo }}</td>
+            <td class="text-muted text-sm">{{ m.fecha_devolucion_esperada.strftime('%Y-%m-%d %H:%M') if m.fecha_devolucion_esperada else '—' }}</td>
+            <td style="text-align:center">{{ m.multa_horas }}</td>
+            <td class="text-muted text-sm">{{ m.multa_tasa_hora_formato }}</td>
+            <td>{{ m.multa_monto_formato }}</td>
+            <td style="color:#16a34a">{{ m.multa_pagado_formato }}</td>
+            <td style="font-weight:700;color:#b91c1c">{{ m.multa_saldo_formato }}</td>
+            <td>
+              {% if m.aun_activo %}
+                <span class="badge badge-vencido">EN CURSO</span>
+              {% else %}
+                <span class="badge badge-devuelto">DEVUELTO</span>
+              {% endif %}
+            </td>
+            <td>
+              <button class="btn btn-success btn-sm"
+                onclick="abrirPagoMulta({{ m.prestamo_id }},
+                  '{{ m.codigo_prestamo }}',
+                  '{{ m.usuario_nombre|replace("'","\\'") }}',
+                  '{{ m.articulo|replace("'","\\'") }}',
+                  {{ m.multa_monto }},
+                  '{{ m.multa_monto_formato }}',
+                  {{ m.multa_horas }},
+                  {{ m.multa_pagado }},
+                  '{{ m.multa_pagado_formato }}',
+                  {{ m.multa_saldo }},
+                  '{{ m.multa_saldo_formato }}')">
+                💵 Registrar pago
+              </button>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </main>
+</div>
+
+<!-- Modal registrar pago -->
+<div class="modal-backdrop" id="modal-pago-multa">
+  <div class="modal modal-lg">
+    <h3 class="modal-title">Registrar pago (parcial o total)</h3>
+    <div style="background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.4);padding:14px;border-radius:8px;margin-bottom:14px">
+      <p style="font-size:13px;margin-bottom:6px">
+        El estudiante puede abonar parcialmente. La multa seguirá pendiente hasta saldar el total.
+      </p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;font-size:13px;margin-top:10px">
+        <div><div class="text-muted text-sm">Código préstamo</div><div id="pm-codigo" style="font-weight:600"></div></div>
+        <div><div class="text-muted text-sm">Estudiante</div><div id="pm-estudiante"></div></div>
+        <div><div class="text-muted text-sm">Artículo</div><div id="pm-articulo"></div></div>
+        <div><div class="text-muted text-sm">Horas de retraso</div><div id="pm-horas"></div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+        <div>
+          <div class="text-muted text-sm">Monto total</div>
+          <div id="pm-monto" style="font-size:18px;font-weight:700"></div>
+        </div>
+        <div>
+          <div class="text-muted text-sm">Ya pagado</div>
+          <div id="pm-pagado" style="font-size:18px;font-weight:700;color:#16a34a"></div>
+        </div>
+        <div>
+          <div class="text-muted text-sm">Saldo pendiente</div>
+          <div id="pm-saldo" style="font-size:22px;font-weight:700;color:#b91c1c"></div>
+        </div>
+      </div>
+    </div>
+    <form id="pm-form" method="post">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Monto recibido ahora (COP) <span style="color:var(--danger)">*</span></label>
+          <input class="form-control" type="number" name="monto" id="pm-monto-input"
+                 min="1" required placeholder="Ej: 50000"/>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="rellenarSaldo()">
+              💯 Saldar total
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="rellenarMitad()">
+              ½ Mitad del saldo
+            </button>
+          </div>
+          <p class="text-muted text-sm" style="margin-top:6px">
+            No puede exceder el saldo pendiente. Si abonas menos que el saldo,
+            la multa queda pendiente con el saldo restante.
+          </p>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Observaciones</label>
+          <textarea class="form-control" name="observaciones" rows="2"
+                    placeholder="Comprobante, motivo de descuento, etc..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('modal-pago-multa')">Cancelar</button>
+        <button type="submit" class="btn btn-success">Confirmar pago</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let _saldoActual = 0;
+
+function abrirPagoMulta(id, codigo, estudiante, articulo, monto, montoFormato, horas, pagado, pagadoFormato, saldo, saldoFormato) {
+  document.getElementById('pm-codigo').textContent     = codigo;
+  document.getElementById('pm-estudiante').textContent = estudiante;
+  document.getElementById('pm-articulo').textContent   = articulo;
+  document.getElementById('pm-horas').textContent      = horas;
+  document.getElementById('pm-monto').textContent      = montoFormato;
+  document.getElementById('pm-pagado').textContent     = pagadoFormato;
+  document.getElementById('pm-saldo').textContent      = saldoFormato;
+  const inp = document.getElementById('pm-monto-input');
+  inp.value = saldo;            // por default propone saldar total
+  inp.max   = saldo;
+  inp.placeholder = `Saldo: ${saldo}`;
+  _saldoActual = saldo;
+  document.getElementById('pm-form').action = `/admin/multas/${id}/pagar`;
+  openModal('modal-pago-multa');
+}
+
+function rellenarSaldo() {
+  document.getElementById('pm-monto-input').value = _saldoActual;
+}
+function rellenarMitad() {
+  document.getElementById('pm-monto-input').value = Math.floor(_saldoActual / 2);
+}
+</script>
+{% endblock %}
