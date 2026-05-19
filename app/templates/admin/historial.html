@@ -14,12 +14,6 @@
   <nav class="sidebar" style="display:flex;flex-direction:column">
     <p class="sidebar-menu-label">MENÚ</p>
     <a href="/admin/dashboard"><button class="nav-btn">⬛ Dashboard</button></a>
-    <a href="/admin/solicitudes"><button class="nav-btn">✉ Solicitudes
-      {% if solicitudes_count.total %}<span class="nav-badge">{{ solicitudes_count.total }}</span>{% endif %}
-    </button></a>
-    <a href="/admin/multas"><button class="nav-btn">$ Multas
-      {% if multas_count %}<span class="nav-badge">{{ multas_count }}</span>{% endif %}
-    </button></a>
     <a href="/admin/productos"><button class="nav-btn">■ Productos</button></a>
     <a href="/admin/historial"><button class="nav-btn active">▤ Historial</button></a>
     <a href="/admin/usuarios"><button class="nav-btn">◈ Usuarios</button></a>
@@ -32,25 +26,8 @@
     <div class="alert alert-{{ 'success' if tipo == 'success' else 'error' }}">{{ msg }}</div>
     {% endif %}
 
-    <!-- Sub-tabs del módulo Historial -->
-    <div style="display:flex;gap:6px;border-bottom:1px solid var(--border);margin-bottom:18px">
-      <a href="/admin/historial" style="text-decoration:none">
-        <div style="padding:10px 18px;font-size:13px;font-weight:600;color:var(--blue);border-bottom:2px solid var(--blue);margin-bottom:-1px">
-          ▤ Préstamos
-        </div>
-      </a>
-      <a href="/admin/disputas" style="text-decoration:none">
-        <div style="padding:10px 18px;font-size:13px;font-weight:500;color:var(--text-2);border-bottom:2px solid transparent;margin-bottom:-1px">
-          ⚠ Disputas
-        </div>
-      </a>
-    </div>
-
     <div class="section-row">
       <span class="section-title">Historial de préstamos</span>
-      <a href="/admin/reportes/historial.pdf?desde={{ desde }}&hasta={{ hasta }}" target="_blank">
-        <button type="button" class="btn btn-ghost btn-sm">📄 Exportar PDF</button>
-      </a>
       <button class="btn btn-primary btn-sm" onclick="openModal('modal-nuevo-prestamo')">
         ➕ Nuevo préstamo
       </button>
@@ -85,14 +62,11 @@
             <td><span class="badge badge-{{ p.estado_prestamo }}">{{ p.estado_prestamo|capitalize }}</span></td>
             <td>
               {% if p.estado_prestamo in ('activo', 'vencido') %}
-              {% set vencido = p.estado_prestamo == 'vencido' %}
-              <button class="btn {{ 'btn-warning' if vencido else 'btn-success' }} btn-sm"
+              <button class="btn btn-success btn-sm"
                 onclick="abrirDevolucion({{ p.prestamo_id }},
                   '{{ p.codigo_prestamo }}',
-                  '{{ p.articulo|replace("'","\\'")|replace('"','\\"') }}',
-                  {{ 'true' if vencido else 'false' }},
-                  '{{ p.usuario_correo or "" }}')">
-                {{ 'Recibir con demora' if vencido else 'Marcar devolución de insumo' }}
+                  '{{ p.articulo|replace("'","\\'")|replace('"','\\"') }}')">
+                Devolver
               </button>
               {% endif %}
             </td>
@@ -108,78 +82,33 @@
 
 <!-- Modal nuevo préstamo -->
 <div class="modal-backdrop" id="modal-nuevo-prestamo">
-  <div class="modal modal-lg">
+  <div class="modal">
     <h3 class="modal-title">Registrar nuevo préstamo</h3>
-    <form method="post" action="/admin/prestamos/nuevo" id="np-form">
+    <form method="post" action="/admin/prestamos/nuevo">
       <div class="form-grid">
-
         <div class="form-group">
-          <label class="form-label">Estudiante</label>
-          <div style="display:flex;gap:8px;margin-bottom:6px">
-            <input class="form-control" type="text" id="np-bc-usuario"
-                   placeholder="📷 Escanear código de barras del carnet..."
-                   autocomplete="off"
-                   style="font-family:monospace;letter-spacing:1px"/>
-          </div>
-          <input class="form-control" name="usuario_correo" id="np-correo" type="email"
-                 placeholder="o escriba el correo: correo@academia.umb.edu.co" required/>
-          <div id="np-usr-info" class="text-muted text-sm" style="margin-top:4px"></div>
+          <label class="form-label">Correo del estudiante</label>
+          <input class="form-control" name="usuario_correo" type="email"
+                 placeholder="correo@academia.umb.edu.co" required/>
         </div>
-
-        <div class="form-group" style="background:rgba(59,125,221,.05);padding:12px;border-radius:8px;border:1px solid var(--border)">
-          <label class="form-label" style="font-weight:700">📦 Artículo 1 (obligatorio)</label>
-          <div style="display:flex;gap:8px;margin-bottom:6px">
-            <input class="form-control" type="text" id="np-bc-articulo"
-                   placeholder="📷 Escanear código de barras..."
-                   autocomplete="off" data-target="1"
-                   style="font-family:monospace;letter-spacing:1px"/>
-          </div>
-          <select class="form-control" name="articulo_id_1" id="np-articulo" data-target="1" required>
-            <option value="">o seleccionar...</option>
+        <div class="form-group">
+          <label class="form-label">Artículo</label>
+          <select class="form-control" name="articulo_id" required>
+            <option value="">Seleccionar...</option>
             {% for a in articulos %}
             {% if a.stock_disponible > 0 %}
             <option value="{{ a.articulo_id }}">{{ a.articulo }} (disp: {{ a.stock_disponible }})</option>
             {% endif %}
             {% endfor %}
           </select>
-          <div id="np-art-info" class="text-muted text-sm" style="margin-top:4px"></div>
-          <label class="form-label" style="margin-top:10px">Fecha de devolución</label>
-          <input class="form-control" type="datetime-local" name="fecha_devolucion_1" required/>
         </div>
-
-        <div class="form-group" id="art2-container" style="background:rgba(245,158,11,.05);padding:12px;border-radius:8px;border:1px dashed var(--border);display:none">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-            <label class="form-label" style="margin:0;font-weight:700">📦 Artículo 2 (opcional)</label>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="quitarArticulo2()">✕ Quitar</button>
-          </div>
-          <div style="display:flex;gap:8px;margin-bottom:6px">
-            <input class="form-control" type="text" id="np-bc-articulo-2"
-                   placeholder="📷 Escanear código de barras..."
-                   autocomplete="off" data-target="2"
-                   style="font-family:monospace;letter-spacing:1px"/>
-          </div>
-          <select class="form-control" name="articulo_id_2" id="np-articulo-2" data-target="2">
-            <option value="">o seleccionar...</option>
-            {% for a in articulos %}
-            {% if a.stock_disponible > 0 %}
-            <option value="{{ a.articulo_id }}">{{ a.articulo }} (disp: {{ a.stock_disponible }})</option>
-            {% endif %}
-            {% endfor %}
-          </select>
-          <div id="np-art-info-2" class="text-muted text-sm" style="margin-top:4px"></div>
-          <label class="form-label" style="margin-top:10px">Fecha de devolución</label>
-          <input class="form-control" type="datetime-local" name="fecha_devolucion_2"/>
+        <div class="form-group">
+          <label class="form-label">Fecha de devolución esperada</label>
+          <input class="form-control" type="datetime-local" name="fecha_devolucion" required/>
         </div>
-
-        <button type="button" id="btn-agregar-art2" class="btn btn-ghost btn-sm" style="align-self:flex-start"
-                onclick="agregarArticulo2()">
-          ➕ Agregar segundo artículo
-        </button>
-
         <div class="form-group">
           <label class="form-label">Observaciones</label>
-          <textarea class="form-control" name="observaciones" rows="2"
-                    placeholder="Opcional — aplica a ambos artículos..."></textarea>
+          <textarea class="form-control" name="observaciones" rows="2"></textarea>
         </div>
       </div>
       <div class="modal-footer">
@@ -192,51 +121,27 @@
 
 <!-- Modal devolución -->
 <div class="modal-backdrop" id="modal-devolucion">
-  <div class="modal modal-lg">
+  <div class="modal">
     <h3 class="modal-title">Registrar devolución</h3>
-    <p class="text-muted text-sm" style="margin-bottom:12px">
+    <p class="text-muted text-sm" style="margin-bottom:16px">
       Código: <strong id="dev-codigo"></strong><br/>
       Artículo: <strong id="dev-articulo"></strong>
     </p>
-    <div id="dev-aviso-tarde" class="alert alert-error" style="display:none;margin-bottom:12px">
-      Este préstamo está <strong>vencido</strong>. Se registrará como devolución con demora.
-    </div>
     <form id="dev-form" method="post">
-      <input type="hidden" name="redirigir" value="historial"/>
-
       <div class="form-grid">
         <div class="form-group">
-          <label class="form-label">Fecha y hora de la devolución</label>
-          <input class="form-control" type="datetime-local"
-                 name="fecha_devolucion" id="dev-fecha" required/>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Estado del artículo al recibirlo</label>
+          <label class="form-label">Estado del artículo devuelto</label>
           <select class="form-control" name="estado_articulo" required>
             <option value="disponible">Disponible (buen estado)</option>
             <option value="mantenimiento">Requiere mantenimiento</option>
             <option value="baja">Inutilizable — dar de baja</option>
           </select>
         </div>
-      </div>
-
-      <div class="form-group" style="margin-top:8px">
-        <label class="form-label">Checklist de revisión del artículo</label>
-        <div class="checklist">
-          <label><input type="checkbox" name="checklist" value="funciona"/> Funcionamiento correcto</label>
-          <label><input type="checkbox" name="checklist" value="sin_danos"/> Sin daños visibles ni golpes</label>
-          <label><input type="checkbox" name="checklist" value="accesorios"/> Accesorios completos</label>
-          <label><input type="checkbox" name="checklist" value="empaque"/> Empaque / embalaje en buen estado</label>
-          <label><input type="checkbox" name="checklist" value="limpieza"/> Limpieza adecuada</label>
+        <div class="form-group">
+          <label class="form-label">Observaciones</label>
+          <textarea class="form-control" name="observaciones" rows="2"></textarea>
         </div>
       </div>
-
-      <div class="form-group">
-        <label class="form-label">Observaciones adicionales</label>
-        <textarea class="form-control" name="observaciones" rows="2"
-                  placeholder="Detalles opcionales sobre la devolución..."></textarea>
-      </div>
-
       <div class="modal-footer">
         <button type="button" class="btn btn-ghost" onclick="closeModal('modal-devolucion')">Cancelar</button>
         <button type="submit" class="btn btn-success">Confirmar devolución</button>

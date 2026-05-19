@@ -37,6 +37,9 @@ docker/sqlserver/data/
 reports/
 *.pdf
 
+# ── Claude Code (configuracion local del IDE) ────────────────
+.claude/
+
 # ── Archivos binarios grandes ────────────────
 *.pyd
 *.pyx

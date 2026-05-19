@@ -1,11 +1,3 @@
--- =============================================================================
--- SISTEMA TRANSACCIONAL DE PRÉSTAMOS UNIVERSITARIOS
--- Universidad Manuela Beltrán - Ingeniería de Software
--- Autores: Juan S. Mendoza, Hemer S. Pérez, Brayan Turmequé
--- Base de datos: PostgreSQL
--- Archivo: 01_schema.sql — Esquema principal
--- =============================================================================
-
 -- Eliminar y recrear la base de datos limpia
 \connect postgres
 DROP DATABASE IF EXISTS prestamos_umb;
@@ -35,12 +27,10 @@ CREATE TYPE estado_articulo AS ENUM (
 );
 
 CREATE TYPE estado_prestamo AS ENUM (
-    'pendiente',
     'activo',
     'devuelto',
     'vencido',
-    'cancelado',
-    'rechazado'
+    'cancelado'
 );
 
 CREATE TYPE tipo_rol AS ENUM (
@@ -125,7 +115,6 @@ CREATE TABLE articulos (
     codigo_barras       VARCHAR(100)    UNIQUE,       -- ESPACIO: lector de código de barras
     codigo_interno      VARCHAR(50)     UNIQUE,       -- Código institucional del artículo
     ubicacion           VARCHAR(150),                 -- Ej: "Sala B, Estante 3"
-    tiempo_maximo_minutos INTEGER       CHECK (tiempo_maximo_minutos IS NULL OR tiempo_maximo_minutos > 0),
     activo              BOOLEAN         DEFAULT TRUE,
     fecha_registro      TIMESTAMP       DEFAULT NOW(),
     fecha_actualizacion TIMESTAMP       DEFAULT NOW(),
@@ -159,7 +148,6 @@ CREATE TABLE prestamos (
     fecha_devolucion_real       TIMESTAMP,
     observaciones               TEXT,
     codigo_prestamo             VARCHAR(50)     UNIQUE DEFAULT ('PRE-' || TO_CHAR(NOW(), 'YYYYMMDD') || '-' || LPAD(NEXTVAL('prestamos_id_seq')::TEXT, 6, '0')),
-    codigo_solicitud            VARCHAR(50),
 
     CONSTRAINT chk_fecha_devolucion CHECK (fecha_devolucion_esperada > fecha_prestamo)
 );
@@ -185,10 +173,7 @@ CREATE TABLE devoluciones (
     administrador_recibe_id     INTEGER         REFERENCES usuarios(id) ON DELETE SET NULL,
     estado_articulo_recibido    estado_articulo NOT NULL,
     fecha_devolucion            TIMESTAMP       NOT NULL DEFAULT NOW(),
-    observaciones               TEXT,
-    confirmada_estudiante       BOOLEAN         DEFAULT NULL,
-    fecha_confirmacion          TIMESTAMP,
-    motivo_rechazo              TEXT
+    observaciones               TEXT
 );
 
 COMMENT ON TABLE devoluciones IS 'Registro de cada devolución con el estado físico en que fue recibido el artículo';

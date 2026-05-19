@@ -1,4 +1,4 @@
-# PrestaUni — Sistema de Préstamos UMB
+﻿# PrestaUni — Sistema de Préstamos UMB
 
 Sistema transaccional de préstamos universitarios con flujo de aceptación bilateral
 (admin y estudiante), gestión de multas por retraso en COP, soporte para escáneres

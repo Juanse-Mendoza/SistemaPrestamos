@@ -14,12 +14,6 @@
   <nav class="sidebar" style="display:flex;flex-direction:column">
     <p class="sidebar-menu-label">MENÚ</p>
     <a href="/admin/dashboard"><button class="nav-btn">⬛ Dashboard</button></a>
-    <a href="/admin/solicitudes"><button class="nav-btn">✉ Solicitudes
-      {% if solicitudes_count.total %}<span class="nav-badge">{{ solicitudes_count.total }}</span>{% endif %}
-    </button></a>
-    <a href="/admin/multas"><button class="nav-btn">$ Multas
-      {% if multas_count %}<span class="nav-badge">{{ multas_count }}</span>{% endif %}
-    </button></a>
     <a href="/admin/productos"><button class="nav-btn">■ Productos</button></a>
     <a href="/admin/historial"><button class="nav-btn">▤ Historial</button></a>
     <a href="/admin/usuarios"><button class="nav-btn active">◈ Usuarios</button></a>
@@ -34,9 +28,6 @@
 
     <div class="section-row">
       <span class="section-title">Usuarios del sistema</span>
-      <a href="/admin/reportes/usuarios.pdf" target="_blank">
-        <button type="button" class="btn btn-ghost btn-sm">📄 Exportar PDF</button>
-      </a>
       <button class="btn btn-primary btn-sm" onclick="openModal('modal-nuevo-usuario')">
         ➕ Nuevo usuario
       </button>
@@ -46,9 +37,7 @@
       <table>
         <thead>
           <tr><th>Nombre completo</th><th>Correo</th><th>Documento</th>
-              <th>Cód. barras</th>
-              <th>Rol</th><th>Activo</th><th>Préstamos</th><th>Activos</th>
-              <th>Acciones</th></tr>
+              <th>Rol</th><th>Activo</th><th>Préstamos</th><th>Activos</th><th>Registro</th></tr>
         </thead>
         <tbody>
         {% for u in usuarios %}
@@ -56,7 +45,6 @@
             <td style="font-weight:500">{{ u.nombre_completo }}</td>
             <td class="text-muted text-sm">{{ u.correo }}</td>
             <td class="text-muted text-sm">{{ u.numero_documento or '—' }}</td>
-            <td class="text-muted text-sm" style="font-family:monospace">{{ u.codigo_barras or '—' }}</td>
             <td>
               <span class="badge {{ 'badge-activo' if u.rol == 'administrador' else 'badge-devuelto' }}">
                 {{ u.rol|capitalize }}
@@ -65,21 +53,10 @@
             <td>{{ '✓' if u.activo else '✗' }}</td>
             <td class="text-muted">{{ u.total_prestamos }}</td>
             <td class="text-muted">{{ u.prestamos_activos }}</td>
-            <td>
-              <button class="btn btn-ghost btn-sm"
-                onclick="abrirEditarUsuario({{ u.id }},
-                  '{{ u.nombre|replace("'","\\'")|replace('"','\\"') }}',
-                  '{{ u.apellido|replace("'","\\'")|replace('"','\\"') }}',
-                  '{{ u.correo }}',
-                  '{{ u.numero_documento or '' }}',
-                  '{{ u.codigo_barras or '' }}',
-                  {{ 'true' if u.activo else 'false' }})">
-                Editar
-              </button>
-            </td>
+            <td class="text-muted text-sm">{{ u.fecha_creacion.strftime('%Y-%m-%d') if u.fecha_creacion else '—' }}</td>
           </tr>
         {% else %}
-          <tr><td colspan="9" style="text-align:center;color:var(--text-3);padding:24px">Sin usuarios registrados</td></tr>
+          <tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:24px">Sin usuarios registrados</td></tr>
         {% endfor %}
         </tbody>
       </table>
@@ -89,9 +66,9 @@
 
 <!-- Modal nuevo usuario -->
 <div class="modal-backdrop" id="modal-nuevo-usuario">
-  <div class="modal modal-lg">
+  <div class="modal">
     <h3 class="modal-title">Registrar nuevo usuario</h3>
-    <form method="post" action="/admin/usuarios/nuevo" id="nu-form">
+    <form method="post" action="/admin/usuarios/nuevo">
       <div class="form-grid">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div class="form-group">
@@ -108,34 +85,13 @@
           <input class="form-control" type="email" name="correo" required
                  placeholder="correo@academia.umb.edu.co"/>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div class="form-group">
-            <label class="form-label">Documento</label>
-            <input class="form-control" name="documento" placeholder="Opcional"/>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Contraseña *</label>
-            <input class="form-control" type="password" name="password" required minlength="6"/>
-          </div>
+        <div class="form-group">
+          <label class="form-label">Documento</label>
+          <input class="form-control" name="documento" placeholder="Opcional"/>
         </div>
         <div class="form-group">
-          <label class="form-label">Código de barras del carnet</label>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input class="form-control" name="codigo_barras" id="nu-barcode"
-                   placeholder="Escanee con lector USB, escriba o genere automáticamente..."
-                   autocomplete="off"
-                   style="font-family:monospace;letter-spacing:1px;flex:1"/>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="generarCodigoUsuario('nu-barcode')"
-                    title="Generar código automático único">
-              🎲 Generar
-            </button>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('nu-barcode').value=''" title="Limpiar">
-              ✕
-            </button>
-          </div>
-          <p class="text-muted text-sm" style="margin-top:4px">
-            Sirve para identificar al estudiante con su carnet al hacer préstamos. Opcional.
-          </p>
+          <label class="form-label">Contraseña *</label>
+          <input class="form-control" type="password" name="password" required minlength="6"/>
         </div>
         <div class="form-group">
           <label class="form-label">Rol *</label>
@@ -152,94 +108,4 @@
     </form>
   </div>
 </div>
-
-<!-- Modal editar usuario -->
-<div class="modal-backdrop" id="modal-editar-usuario">
-  <div class="modal modal-lg">
-    <h3 class="modal-title">Editar usuario</h3>
-    <form id="eu-form" method="post">
-      <div class="form-grid">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div class="form-group">
-            <label class="form-label">Nombre *</label>
-            <input class="form-control" id="eu-nombre" name="nombre" required/>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Apellido *</label>
-            <input class="form-control" id="eu-apellido" name="apellido" required/>
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Correo *</label>
-          <input class="form-control" id="eu-correo" type="email" name="correo" required/>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div class="form-group">
-            <label class="form-label">Documento</label>
-            <input class="form-control" id="eu-documento" name="documento"/>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Nueva contraseña</label>
-            <input class="form-control" type="password" name="password"
-                   placeholder="Dejar vacío para no cambiar"/>
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Código de barras del carnet</label>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input class="form-control" name="codigo_barras" id="eu-barcode"
-                   placeholder="Escanee, escriba o genere..."
-                   autocomplete="off"
-                   style="font-family:monospace;letter-spacing:1px;flex:1"/>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="generarCodigoUsuario('eu-barcode')"
-                    title="Generar código automático único">
-              🎲 Generar
-            </button>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('eu-barcode').value=''" title="Limpiar">
-              ✕
-            </button>
-          </div>
-        </div>
-        <div class="form-group" style="background:var(--bg-input);padding:10px 14px;border-radius:6px">
-          <label style="display:flex;gap:10px;align-items:center;cursor:pointer">
-            <input type="checkbox" id="eu-activo" name="activo"/>
-            <span style="font-size:13px">
-              <strong>Cuenta activa</strong> — si se desactiva, el usuario no podrá iniciar sesión
-            </span>
-          </label>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-ghost" onclick="closeModal('modal-editar-usuario')">Cancelar</button>
-        <button type="submit" class="btn btn-primary">Guardar cambios</button>
-      </div>
-    </form>
-  </div>
-</div>
-{% endblock %}
-{% block scripts %}
-<script>
-async function generarCodigoUsuario(inputId) {
-  try {
-    const r = await fetch('/admin/api/generar-codigo-usuario');
-    const d = await r.json();
-    if (d.codigo) document.getElementById(inputId).value = d.codigo;
-  } catch (e) {
-    alert('No se pudo generar el código. Reintente.');
-  }
-}
-
-function abrirEditarUsuario(id, nombre, apellido, correo, documento, codigoBarras, activo) {
-  document.getElementById('eu-nombre').value    = nombre;
-  document.getElementById('eu-apellido').value  = apellido;
-  document.getElementById('eu-correo').value    = correo;
-  document.getElementById('eu-documento').value = documento || '';
-  document.getElementById('eu-barcode').value   = codigoBarras || '';
-  document.getElementById('eu-activo').checked  = !!activo;
-  document.getElementById('eu-form').action     = `/admin/usuarios/${id}/editar`;
-  // Limpiar el campo password al abrir
-  document.querySelector('#eu-form input[name="password"]').value = '';
-  openModal('modal-editar-usuario');
-}
-</script>
 {% endblock %}

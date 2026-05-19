@@ -1,4 +1,4 @@
-DROP PROCEDURE IF EXISTS sp_registrar_devolucion(INTEGER, estado_articulo, INTEGER, TEXT);
+﻿DROP PROCEDURE IF EXISTS sp_registrar_devolucion(INTEGER, estado_articulo, INTEGER, TEXT);
 
 CREATE OR REPLACE PROCEDURE sp_registrar_devolucion(
     p_prestamo_id               INTEGER,

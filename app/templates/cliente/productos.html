@@ -12,10 +12,6 @@
 
   <div class="tab-bar">
     <a href="/cliente/productos"><button class="tab-btn active">Productos</button></a>
-    <a href="/cliente/solicitudes"><button class="tab-btn">
-      Solicitudes
-      {% if solicitudes_count.total %}<span class="nav-badge">{{ solicitudes_count.total }}</span>{% endif %}
-    </button></a>
     <a href="/cliente/historial"><button class="tab-btn">Historial</button></a>
   </div>
 
@@ -55,23 +51,15 @@
           <div class="stock-fill {{ 'low' if pct < 30 else '' }}" style="width:{{ pct }}%"></div>
         </div>
         <div class="stock-text">Stock: {{ a.stock_disponible }} / {{ a.stock_total }}</div>
-        {% if a.estado == 'mantenimiento' %}
-          <button class="btn btn-ghost" disabled style="justify-content:center;background:rgba(234,179,8,.1);color:#ca8a04;border:1px dashed #f59e0b">
-            🛠 En mantenimiento
-          </button>
-          <p class="text-muted text-sm" style="text-align:center;margin-top:4px">Temporalmente no disponible</p>
-        {% elif a.stock_disponible > 0 and a.estado == 'disponible' %}
-          <button class="btn btn-primary" style="justify-content:center"
-            onclick="abrirSolicitar({{ a.articulo_id }},
-              '{{ a.articulo|replace("'","\\'")|replace('"','\\"') }}',
-              {{ a.stock_disponible }}, {{ a.stock_total }})">
-            Solicitar préstamo
-          </button>
+        {% if a.stock_disponible > 0 %}
+        <button class="btn btn-primary" style="justify-content:center"
+          onclick="abrirSolicitar({{ a.articulo_id }},
+            '{{ a.articulo|replace("'","\\'")|replace('"','\\"') }}',
+            {{ a.stock_disponible }}, {{ a.stock_total }})">
+          Solicitar préstamo
+        </button>
         {% else %}
-          <button class="btn btn-ghost" disabled style="justify-content:center">Sin disponibilidad</button>
-          <p class="text-muted text-sm" style="text-align:center;margin-top:4px">
-            {% if a.estado == 'prestado' %}Todas las unidades prestadas{% else %}No disponible{% endif %}
-          </p>
+        <button class="btn btn-ghost" disabled style="justify-content:center">Sin disponibilidad</button>
         {% endif %}
       </div>
       {% else %}

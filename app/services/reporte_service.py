@@ -1,4 +1,4 @@
-"""Generación de reportes PDF con reportlab."""
+﻿"""Generación de reportes PDF con reportlab."""
 from __future__ import annotations
 
 from datetime import datetime

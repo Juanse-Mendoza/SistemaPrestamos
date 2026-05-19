@@ -216,7 +216,6 @@ SELECT
     u.nombre || ' ' || u.apellido   AS nombre_completo,
     u.correo,
     u.numero_documento,
-    u.codigo_barras,
     r.nombre                        AS rol,
     u.activo,
     u.fecha_creacion,
@@ -225,7 +224,7 @@ SELECT
 FROM usuarios u
 INNER JOIN roles r ON r.id = u.rol_id
 LEFT  JOIN prestamos p ON p.usuario_id = u.id
-GROUP BY u.id, u.nombre, u.apellido, u.correo, u.numero_documento, u.codigo_barras, r.nombre, u.activo, u.fecha_creacion
+GROUP BY u.id, u.nombre, u.apellido, u.correo, u.numero_documento, r.nombre, u.activo, u.fecha_creacion
 ORDER BY u.apellido, u.nombre;
 
 COMMENT ON VIEW v_usuarios IS 'Lista de usuarios con conteo de préstamos. Módulo de gestión de usuarios del admin.';

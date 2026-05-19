@@ -234,50 +234,6 @@ tbody td { padding: 10px 14px; vertical-align: middle; color: var(--text-1); }
 .badge-devuelto  { background: rgba(34,197,94,.1);  color: #16a34a; border: 1px solid #22c55e; }
 .badge-vencido   { background: rgba(239,68,68,.1);  color: #dc2626; border: 1px dashed #ef4444; }
 .badge-cancelado { background: rgba(100,116,139,.1);color: #64748b; border: 1px solid #cbd5e1; }
-.badge-pendiente { background: rgba(245,158,11,.12); color: #b45309; border: 1px dashed #f59e0b; }
-.badge-rechazado { background: rgba(100,116,139,.12);color: #475569; border: 1px solid #94a3b8; text-decoration: line-through; }
-
-/* Badge para conteo en menú/tabs */
-.nav-badge {
-  display: inline-block; margin-left: 8px;
-  min-width: 18px; height: 18px; padding: 0 6px;
-  background: var(--danger); color: #fff;
-  border-radius: 9px;
-  font-size: 11px; font-weight: 700; line-height: 18px;
-  text-align: center;
-}
-
-/* Fila resaltada tras búsqueda */
-@keyframes filaPulso {
-  0%   { background: rgba(59,125,221,.35); }
-  60%  { background: rgba(59,125,221,.15); }
-  100% { background: rgba(59,125,221,.08); }
-}
-tr.fila-resaltada > td {
-  animation: filaPulso 2s ease-out forwards;
-  box-shadow: inset 0 0 0 1px var(--blue);
-}
-
-/* Estados del buscador de código de barras (status badge) */
-.barcode-status { padding: 10px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; }
-.barcode-status.escuchando { background: rgba(245,158,11,.12); color: #b45309; border: 1px dashed #f59e0b; }
-.barcode-status.detectado  { background: rgba(34,197,94,.12);  color: #16a34a; border: 1px solid #22c55e; }
-.barcode-status.duplicado  { background: rgba(239,68,68,.12);  color: #dc2626; border: 1px solid #ef4444; }
-
-/* Shake del input cuando no se encuentra */
-@keyframes inputShake {
-  0%, 100% { transform: translateX(0); border-color: var(--border); }
-  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); border-color: var(--danger); }
-  20%, 40%, 60%, 80%      { transform: translateX(4px); border-color: var(--danger); }
-}
-.input-shake { animation: inputShake .45s ease-in-out; }
-
-/* Resalte cuando se autocompleta un campo */
-@keyframes inputAutoFill {
-  0%   { background: rgba(34,197,94,.25); box-shadow: 0 0 0 3px rgba(34,197,94,.3); }
-  100% { background: var(--bg-input);     box-shadow: 0 0 0 0 rgba(34,197,94,0);   }
-}
-.input-autocompletado { animation: inputAutoFill 1.5s ease-out; }
 .badge-disponible    { background: rgba(34,197,94,.1);  color: #16a34a; }
 .badge-prestado      { background: rgba(249,115,22,.1); color: #ea580c; }
 .badge-mantenimiento { background: rgba(234,179,8,.1);  color: #ca8a04; }
@@ -367,20 +323,6 @@ select.form-control option { background: #fff; color: var(--text-1); }
 .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 20px; color: var(--text-1); }
 .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
 .form-grid { display: grid; gap: 14px; }
-.modal.modal-lg { max-width: 620px; }
-
-/* ── Checklist (devolución, etc.) */
-.checklist {
-  display: flex; flex-direction: column; gap: 6px;
-  background: var(--bg-input); padding: 10px 12px;
-  border: 1px solid var(--border); border-radius: var(--radius);
-}
-.checklist label {
-  display: flex; gap: 8px; align-items: center;
-  font-size: 13px; color: var(--text-1); cursor: pointer;
-  padding: 3px 0;
-}
-.checklist input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 
 /* ══════════════════════════════════════
    PRODUCTOS GRID (cliente)

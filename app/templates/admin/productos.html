@@ -14,12 +14,6 @@
   <nav class="sidebar" style="display:flex;flex-direction:column">
     <p class="sidebar-menu-label">MENÚ</p>
     <a href="/admin/dashboard"><button class="nav-btn">⬛ Dashboard</button></a>
-    <a href="/admin/solicitudes"><button class="nav-btn">✉ Solicitudes
-      {% if solicitudes_count.total %}<span class="nav-badge">{{ solicitudes_count.total }}</span>{% endif %}
-    </button></a>
-    <a href="/admin/multas"><button class="nav-btn">$ Multas
-      {% if multas_count %}<span class="nav-badge">{{ multas_count }}</span>{% endif %}
-    </button></a>
     <a href="/admin/productos"><button class="nav-btn active">■ Productos</button></a>
     <a href="/admin/historial"><button class="nav-btn">▤ Historial</button></a>
     <a href="/admin/usuarios"><button class="nav-btn">◈ Usuarios</button></a>
@@ -34,26 +28,10 @@
 
     <div class="section-row">
       <span class="section-title">Inventario de artículos</span>
-      <a href="/admin/reportes/productos.pdf{% if buscar %}?buscar={{ buscar }}{% endif %}" target="_blank">
-        <button type="button" class="btn btn-ghost btn-sm">📄 Exportar PDF</button>
-      </a>
       <button class="btn btn-primary btn-sm" onclick="openModal('modal-nuevo')">
         ➕ Nuevo artículo
       </button>
     </div>
-
-    <!-- Buscador -->
-    <form method="get" action="/admin/productos"
-          style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
-      <input class="form-control" type="search" name="buscar" value="{{ buscar }}"
-             placeholder="Buscar por nombre, código de barras o código interno..."
-             style="flex:1;min-width:240px;max-width:480px"/>
-      <button type="submit" class="btn btn-primary btn-sm">🔍 Buscar</button>
-      {% if buscar %}
-        <a href="/admin/productos"><button type="button" class="btn btn-ghost btn-sm">✕ Limpiar</button></a>
-        <span class="text-muted text-sm">{{ articulos|length }} resultado{{ 's' if articulos|length != 1 else '' }} para "{{ buscar }}"</span>
-      {% endif %}
-    </form>
 
     <!-- Tabla de inventario -->
     <div class="table-wrap">
@@ -62,7 +40,7 @@
           <tr>
             <th>Código</th><th>Código barras</th><th>Nombre</th>
             <th>Categoría</th><th>Estado</th><th>Disponible</th>
-            <th>Total</th><th>Tiempo máx.</th><th>Ubicación</th><th>Acciones</th>
+            <th>Total</th><th>Ubicación</th><th>Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -76,13 +54,6 @@
             <td><span class="badge badge-{{ a.estado }}">{{ a.estado|capitalize }}</span></td>
             <td>{{ a.stock_disponible }}</td>
             <td class="text-muted">{{ a.stock_total }}</td>
-            <td class="text-muted text-sm">
-              {% if a.tiempo_maximo_legible %}
-                {{ a.tiempo_maximo_legible }}
-              {% else %}
-                <span title="Sin límite">∞</span>
-              {% endif %}
-            </td>
             <td class="text-muted text-sm">{{ a.ubicacion or '—' }}</td>
             <td>
               <div class="flex gap-2">
@@ -90,12 +61,7 @@
                   onclick="abrirEditarProducto({{ a.articulo_id }},
                     '{{ a.articulo|replace("'","\\'")|replace('"','\\"') }}',
                     '{{ (a.descripcion or '')|replace("'","\\'")|replace('"','\\"') }}',
-                    '{{ (a.ubicacion or '')|replace("'","\\'")|replace('"','\\"') }}',
-                    '{{ (a.codigo_barras or '')|replace("'","\\'")|replace('"','\\"') }}',
-                    {{ a.tiempo_maximo_valor or 'null' }},
-                    '{{ a.tiempo_maximo_unidad }}',
-                    '{{ a.estado }}',
-                    {{ a.multa_por_hora_cop or 'null' }})">
+                    '{{ (a.ubicacion or '')|replace("'","\\'")|replace('"','\\"') }}')">
                   Editar
                 </button>
                 <button class="btn btn-warning btn-sm"
@@ -114,8 +80,8 @@
           </tr>
         {% else %}
           <tr>
-            <td colspan="10" style="text-align:center;color:var(--text-3);padding:28px">
-              {% if buscar %}No se encontraron artículos para "{{ buscar }}"{% else %}Sin artículos registrados{% endif %}
+            <td colspan="9" style="text-align:center;color:var(--text-3);padding:28px">
+              Sin artículos registrados
             </td>
           </tr>
         {% endfor %}
@@ -236,30 +202,6 @@
                      placeholder="Sala A, Estante 1"/>
             </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Tiempo máximo de préstamo</label>
-            <div style="display:flex;gap:8px">
-              <input class="form-control" type="number" name="tiempo_maximo_valor"
-                     min="1" placeholder="Ej: 30" style="flex:1"/>
-              <select class="form-control" name="tiempo_maximo_unidad" style="width:130px">
-                <option value="minutos">Minutos</option>
-                <option value="horas">Horas</option>
-                <option value="dias" selected>Días</option>
-              </select>
-            </div>
-            <p class="text-muted text-sm" style="margin-top:4px">
-              Tiempo máximo de préstamo. Dejar vacío = sin límite.
-            </p>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Multa por hora de retraso (COP)</label>
-            <input class="form-control" type="number" name="multa_por_hora_cop"
-                   min="0" step="100" placeholder="Ej: 1000 — vacío = usa default global (1.000 COP)"/>
-            <p class="text-muted text-sm" style="margin-top:4px">
-              Monto en pesos que se cobra al estudiante por cada hora de retraso al devolver
-              este artículo. Si lo dejas vacío, se usa el valor global por defecto.
-            </p>
-          </div>
         </div>
       </div>
 
@@ -290,79 +232,13 @@
           <textarea class="form-control" id="edit-desc" name="descripcion" rows="2"></textarea>
         </div>
         <div class="form-group">
-          <label class="form-label">Código de barras</label>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input class="form-control" id="edit-barcode" name="codigo_barras"
-                   placeholder="Escanee con lector USB o ingrese..."
-                   autocomplete="off"
-                   style="font-family:monospace;letter-spacing:1px"/>
-            <button type="button" class="btn btn-ghost btn-sm" id="edit-btn-camara"
-                    onclick="activarCamaraEdit()" title="Escanear con cámara">
-              📷
-            </button>
-            <button type="button" class="btn btn-ghost btn-sm"
-                    onclick="document.getElementById('edit-barcode').value=''" title="Limpiar código">
-              ✕
-            </button>
-          </div>
-          <div id="edit-barcode-status" class="barcode-status" style="display:none;margin-top:8px"></div>
-          <div id="edit-camara-container" style="display:none;margin-top:10px">
-            <div style="position:relative;border-radius:8px;overflow:hidden;background:#000">
-              <video id="edit-video-scanner" autoplay playsinline
-                     style="width:100%;max-height:200px;object-fit:cover;display:block"></video>
-              <div style="position:absolute;top:0;left:0;right:0;height:2px;
-                          background:linear-gradient(90deg,transparent,var(--red),transparent);
-                          animation:scanLine 1.8s linear infinite"></div>
-            </div>
-            <div style="display:flex;justify-content:flex-end;margin-top:6px">
-              <button type="button" class="btn btn-ghost btn-sm" onclick="detenerCamaraEdit()">
-                ✕ Cerrar cámara
-              </button>
-            </div>
-          </div>
-        </div>
-        <div class="form-group">
           <label class="form-label">Ubicación</label>
           <input class="form-control" id="edit-ubic" name="ubicacion"/>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Tiempo máximo de préstamo</label>
-          <div style="display:flex;gap:8px">
-            <input class="form-control" type="number" id="edit-tiempo-max-valor"
-                   name="tiempo_maximo_valor" min="1"
-                   placeholder="Ej: 30 — vacío = sin límite" style="flex:1"/>
-            <select class="form-control" id="edit-tiempo-max-unidad"
-                    name="tiempo_maximo_unidad" style="width:130px">
-              <option value="minutos">Minutos</option>
-              <option value="horas">Horas</option>
-              <option value="dias">Días</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Estado del artículo</label>
-          <select class="form-control" id="edit-estado" name="estado">
-            <option value="disponible">Disponible</option>
-            <option value="mantenimiento">En mantenimiento (no se puede prestar)</option>
-          </select>
-          <p class="text-muted text-sm" style="margin-top:4px">
-            Cuando está en mantenimiento, los estudiantes lo ven pero no pueden solicitarlo.
-            Para retirar permanentemente usa el botón "Baja".
-          </p>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Multa por hora de retraso (COP)</label>
-          <input class="form-control" type="number" id="edit-multa-hora"
-                 name="multa_por_hora_cop" min="0" step="100"
-                 placeholder="Vacío = usa default global (1.000 COP)"/>
-          <p class="text-muted text-sm" style="margin-top:4px">
-            Tarifa específica de este artículo. Si lo dejas vacío, se usará el valor global.
-          </p>
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-ghost"
-                onclick="cerrarEditar()">Cancelar</button>
+                onclick="closeModal('modal-editar')">Cancelar</button>
         <button type="submit" class="btn btn-primary">Guardar cambios</button>
       </div>
     </form>
@@ -607,101 +483,5 @@ document.getElementById('form-nuevo').addEventListener('submit', function(e) {
     cambiarTab('manual');
   }
 });
-
-// ═════════════════════════════════════════════════════════════════════════════
-// EDITAR ARTÍCULO — cámara y verificación de código de barras
-// ═════════════════════════════════════════════════════════════════════════════
-let editStream = null;
-let editScanInterval = null;
-let editUsbTimer = null;
-const editIdCurrent = () => document.getElementById('edit-id').value;
-
-function cerrarEditar() {
-  detenerCamaraEdit();
-  closeModal('modal-editar');
-}
-
-function mostrarStatusEdit(tipo, texto) {
-  const el = document.getElementById('edit-barcode-status');
-  el.className = `barcode-status ${tipo}`;
-  el.textContent = texto;
-  el.style.display = 'block';
-}
-
-function verificarBarcodeEdit(codigo) {
-  if (!codigo) return;
-  fetch(`/admin/api/buscar-barcode/${encodeURIComponent(codigo)}`)
-    .then(r => r.json())
-    .then(data => {
-      const idActual = parseInt(editIdCurrent());
-      if (data.existe && data.articulo.articulo_id !== idActual) {
-        mostrarStatusEdit('duplicado',
-          `⚠ El código ${codigo} ya pertenece a "${data.articulo.articulo}". No se podrá guardar.`);
-      } else if (data.existe) {
-        mostrarStatusEdit('detectado', `✓ Código ${codigo} (ya asignado a este artículo)`);
-      } else {
-        mostrarStatusEdit('detectado', `✓ Código ${codigo} disponible`);
-      }
-    })
-    .catch(() => {});
-}
-
-// Detección de entrada rápida (lector USB) en el input de edición
-const editBarcodeInp = document.getElementById('edit-barcode');
-if (editBarcodeInp) {
-  editBarcodeInp.addEventListener('keydown', () => {
-    clearTimeout(editUsbTimer);
-    editUsbTimer = setTimeout(() => {
-      const codigo = editBarcodeInp.value.trim();
-      if (codigo.length >= 4) verificarBarcodeEdit(codigo);
-    }, 150);
-  });
-}
-
-async function activarCamaraEdit() {
-  const container = document.getElementById('edit-camara-container');
-  if (!('BarcodeDetector' in window)) {
-    mostrarStatusEdit('duplicado',
-      '⚠ Su navegador no soporta el escáner de cámara. Use Chrome/Edge o lector USB.');
-    return;
-  }
-  try {
-    editStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 } }
-    });
-    const video = document.getElementById('edit-video-scanner');
-    video.srcObject = editStream;
-    container.style.display = 'block';
-
-    const detector = new BarcodeDetector({
-      formats: ['code_128','code_39','ean_13','ean_8','upc_a','qr_code','data_matrix']
-    });
-    mostrarStatusEdit('escuchando', '📷 Cámara activa — apunte al código de barras...');
-
-    editScanInterval = setInterval(async () => {
-      try {
-        const barcodes = await detector.detect(video);
-        if (barcodes.length > 0) {
-          const codigo = barcodes[0].rawValue;
-          document.getElementById('edit-barcode').value = codigo;
-          detenerCamaraEdit();
-          verificarBarcodeEdit(codigo);
-        }
-      } catch (_) {}
-    }, 300);
-  } catch (err) {
-    mostrarStatusEdit('duplicado',
-      '⚠ No se pudo acceder a la cámara. Verifique los permisos del navegador.');
-  }
-}
-
-function detenerCamaraEdit() {
-  clearInterval(editScanInterval);
-  if (editStream) {
-    editStream.getTracks().forEach(t => t.stop());
-    editStream = null;
-  }
-  document.getElementById('edit-camara-container').style.display = 'none';
-}
 </script>
 {% endblock %}

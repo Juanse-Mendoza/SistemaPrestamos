@@ -222,121 +222,24 @@ BEGIN
         articulo_id,
         administrador_autoriza_id,
         fecha_devolucion_esperada,
-        observaciones,
-        estado
+        observaciones
     )
     VALUES (
         p_usuario_id,
         p_articulo_id,
         p_administrador_id,
         p_fecha_devolucion_esperada,
-        p_observaciones,
-        'pendiente'::estado_prestamo
+        p_observaciones
     )
     RETURNING id, codigo_prestamo INTO p_prestamo_id, p_codigo_prestamo;
 
-    p_mensaje := 'Préstamo creado en estado PENDIENTE. Código: ' || p_codigo_prestamo
-                 || '. Esperando aceptación del estudiante.';
+    p_mensaje := 'Préstamo registrado exitosamente. Código: ' || p_codigo_prestamo;
 
 EXCEPTION
     WHEN OTHERS THEN
         p_prestamo_id := -1;
         p_codigo_prestamo := NULL;
         p_mensaje := SQLERRM;
-END;
-$$;
-
--- =============================================================================
--- PROCEDIMIENTO: Aceptar préstamo pendiente (el estudiante lo confirma)
--- =============================================================================
-
-CREATE OR REPLACE PROCEDURE sp_aceptar_prestamo(
-    p_prestamo_id   INTEGER,
-    p_usuario_id    INTEGER,
-    OUT p_mensaje   VARCHAR(200)
-)
-LANGUAGE plpgsql AS $$
-DECLARE
-    v_estado estado_prestamo;
-    v_owner  INTEGER;
-BEGIN
-    SELECT estado, usuario_id INTO v_estado, v_owner
-    FROM prestamos WHERE id = p_prestamo_id;
-
-    IF NOT FOUND THEN
-        p_mensaje := 'Préstamo no encontrado.';
-        RETURN;
-    END IF;
-    IF v_owner != p_usuario_id THEN
-        p_mensaje := 'No autorizado: este préstamo no le pertenece.';
-        RETURN;
-    END IF;
-    IF v_estado != 'pendiente' THEN
-        p_mensaje := 'El préstamo ya no está pendiente (estado actual: ' || v_estado || ').';
-        RETURN;
-    END IF;
-
-    UPDATE prestamos SET estado = 'activo' WHERE id = p_prestamo_id;
-    p_mensaje := 'Préstamo aceptado exitosamente.';
-
-EXCEPTION
-    WHEN OTHERS THEN
-        p_mensaje := 'Error al aceptar: ' || SQLERRM;
-END;
-$$;
-
--- =============================================================================
--- PROCEDIMIENTO: Rechazar préstamo pendiente (restaura stock)
--- =============================================================================
-
-CREATE OR REPLACE PROCEDURE sp_rechazar_prestamo(
-    p_prestamo_id   INTEGER,
-    p_usuario_id    INTEGER,
-    p_motivo        TEXT,
-    OUT p_mensaje   VARCHAR(200)
-)
-LANGUAGE plpgsql AS $$
-DECLARE
-    v_estado     estado_prestamo;
-    v_owner      INTEGER;
-    v_articulo   INTEGER;
-BEGIN
-    SELECT estado, usuario_id, articulo_id INTO v_estado, v_owner, v_articulo
-    FROM prestamos WHERE id = p_prestamo_id;
-
-    IF NOT FOUND THEN
-        p_mensaje := 'Préstamo no encontrado.';
-        RETURN;
-    END IF;
-    IF v_owner != p_usuario_id THEN
-        p_mensaje := 'No autorizado.';
-        RETURN;
-    END IF;
-    IF v_estado != 'pendiente' THEN
-        p_mensaje := 'El préstamo ya no está pendiente.';
-        RETURN;
-    END IF;
-
-    UPDATE prestamos
-    SET estado = 'rechazado',
-        observaciones = COALESCE(observaciones || E'\n\n', '') ||
-                        'RECHAZADO POR EL ESTUDIANTE: ' ||
-                        COALESCE(p_motivo, 'Sin motivo especificado')
-    WHERE id = p_prestamo_id;
-
-    UPDATE articulos
-    SET stock_disponible = stock_disponible + 1,
-        estado = CASE
-                    WHEN stock_disponible + 1 > 0 AND estado = 'prestado' THEN 'disponible'::estado_articulo
-                    ELSE estado
-                 END
-    WHERE id = v_articulo;
-
-    p_mensaje := 'Préstamo rechazado. Stock restaurado.';
-
-EXCEPTION
-    WHEN OTHERS THEN
-        p_mensaje := 'Error al rechazar: ' || SQLERRM;
 END;
 $$;
 
@@ -351,31 +254,18 @@ CREATE OR REPLACE PROCEDURE sp_registrar_devolucion(
     p_estado_articulo_recibido  estado_articulo,
     p_administrador_id          INTEGER,
     p_observaciones             TEXT,
-    p_fecha_devolucion          TIMESTAMP,
     OUT p_devolucion_id         INTEGER,
     OUT p_mensaje               VARCHAR(200)
 )
 LANGUAGE plpgsql AS $$
-DECLARE
-    v_fecha_prestamo TIMESTAMP;
-    v_fecha_efectiva TIMESTAMP;
 BEGIN
     -- Verificar que el préstamo existe y está activo
-    SELECT fecha_prestamo INTO v_fecha_prestamo
-    FROM prestamos
-    WHERE id = p_prestamo_id AND estado IN ('activo', 'vencido');
-
-    IF NOT FOUND THEN
+    IF NOT EXISTS (
+        SELECT 1 FROM prestamos
+        WHERE id = p_prestamo_id AND estado IN ('activo', 'vencido')
+    ) THEN
         p_devolucion_id := -1;
         p_mensaje := 'El préstamo no existe o ya fue devuelto.';
-        RETURN;
-    END IF;
-
-    v_fecha_efectiva := COALESCE(p_fecha_devolucion, NOW());
-
-    IF v_fecha_efectiva < v_fecha_prestamo THEN
-        p_devolucion_id := -1;
-        p_mensaje := 'La fecha de devolución no puede ser anterior a la fecha del préstamo.';
         RETURN;
     END IF;
 
@@ -383,14 +273,12 @@ BEGIN
         prestamo_id,
         administrador_recibe_id,
         estado_articulo_recibido,
-        fecha_devolucion,
         observaciones
     )
     VALUES (
         p_prestamo_id,
         p_administrador_id,
         p_estado_articulo_recibido,
-        v_fecha_efectiva,
         p_observaciones
     )
     RETURNING id INTO p_devolucion_id;
@@ -404,105 +292,6 @@ EXCEPTION
     WHEN OTHERS THEN
         p_devolucion_id := -1;
         p_mensaje := 'Error al registrar devolución: ' || SQLERRM;
-END;
-$$;
-
--- =============================================================================
--- PROCEDIMIENTO: Confirmar devolución por el estudiante
--- =============================================================================
-
-CREATE OR REPLACE PROCEDURE sp_confirmar_devolucion(
-    p_devolucion_id   INTEGER,
-    p_usuario_id      INTEGER,
-    OUT p_mensaje     VARCHAR(200)
-)
-LANGUAGE plpgsql AS $$
-DECLARE
-    v_owner            INTEGER;
-    v_confirmada       BOOLEAN;
-BEGIN
-    SELECT p.usuario_id, d.confirmada_estudiante
-    INTO v_owner, v_confirmada
-    FROM devoluciones d
-    INNER JOIN prestamos p ON p.id = d.prestamo_id
-    WHERE d.id = p_devolucion_id;
-
-    IF NOT FOUND THEN
-        p_mensaje := 'Devolución no encontrada.';
-        RETURN;
-    END IF;
-    IF v_owner != p_usuario_id THEN
-        p_mensaje := 'No autorizado: esta devolución no le pertenece.';
-        RETURN;
-    END IF;
-    IF v_confirmada IS NOT NULL THEN
-        p_mensaje := 'Esta devolución ya fue ' ||
-                     CASE WHEN v_confirmada THEN 'confirmada' ELSE 'rechazada' END || '.';
-        RETURN;
-    END IF;
-
-    UPDATE devoluciones
-    SET confirmada_estudiante = TRUE,
-        fecha_confirmacion    = NOW()
-    WHERE id = p_devolucion_id;
-
-    p_mensaje := 'Devolución confirmada exitosamente.';
-
-EXCEPTION
-    WHEN OTHERS THEN
-        p_mensaje := 'Error al confirmar: ' || SQLERRM;
-END;
-$$;
-
--- =============================================================================
--- PROCEDIMIENTO: Rechazar devolución (queda en disputa)
--- =============================================================================
-
-CREATE OR REPLACE PROCEDURE sp_rechazar_devolucion(
-    p_devolucion_id   INTEGER,
-    p_usuario_id      INTEGER,
-    p_motivo          TEXT,
-    OUT p_mensaje     VARCHAR(200)
-)
-LANGUAGE plpgsql AS $$
-DECLARE
-    v_owner            INTEGER;
-    v_confirmada       BOOLEAN;
-BEGIN
-    SELECT p.usuario_id, d.confirmada_estudiante
-    INTO v_owner, v_confirmada
-    FROM devoluciones d
-    INNER JOIN prestamos p ON p.id = d.prestamo_id
-    WHERE d.id = p_devolucion_id;
-
-    IF NOT FOUND THEN
-        p_mensaje := 'Devolución no encontrada.';
-        RETURN;
-    END IF;
-    IF v_owner != p_usuario_id THEN
-        p_mensaje := 'No autorizado.';
-        RETURN;
-    END IF;
-    IF v_confirmada IS NOT NULL THEN
-        p_mensaje := 'Esta devolución ya fue procesada.';
-        RETURN;
-    END IF;
-    IF p_motivo IS NULL OR LENGTH(TRIM(p_motivo)) = 0 THEN
-        p_mensaje := 'Debe indicar el motivo del rechazo.';
-        RETURN;
-    END IF;
-
-    UPDATE devoluciones
-    SET confirmada_estudiante = FALSE,
-        fecha_confirmacion    = NOW(),
-        motivo_rechazo        = p_motivo
-    WHERE id = p_devolucion_id;
-
-    p_mensaje := 'Rechazo registrado. La devolución queda en disputa para revisión del administrador.';
-
-EXCEPTION
-    WHEN OTHERS THEN
-        p_mensaje := 'Error al rechazar: ' || SQLERRM;
 END;
 $$;
 
