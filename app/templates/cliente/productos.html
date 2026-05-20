@@ -12,12 +12,33 @@
 
   <div class="tab-bar">
     <a href="/cliente/productos"><button class="tab-btn active">Productos</button></a>
+    <a href="/cliente/solicitudes"><button class="tab-btn">
+      Solicitudes
+      {% if solicitudes_count.total %}<span class="nav-badge">{{ solicitudes_count.total }}</span>{% endif %}
+    </button></a>
     <a href="/cliente/historial"><button class="tab-btn">Historial</button></a>
   </div>
 
   <main class="content">
     {% if msg %}
     <div class="alert alert-{{ 'success' if tipo == 'success' else 'error' }}">{{ msg }}</div>
+    {% endif %}
+
+    {% if alertas_vencidos %}
+    <div class="alerta-multa">
+      <div class="alerta-multa-icon">⚠️</div>
+      <div>
+        <div class="alerta-multa-title">
+          ¡Tienes {{ alertas_vencidos|length }} préstamo{{ 's' if alertas_vencidos|length != 1 else '' }} vencido{{ 's' if alertas_vencidos|length != 1 else '' }}!
+        </div>
+        <div class="alerta-multa-items">
+          {% for a in alertas_vencidos %}
+          <div>• <strong>{{ a.articulo }}</strong> — {{ a.horas }}h de retraso — Multa: <strong style="color:#b91c1c">{{ a.multa_saldo_fmt }}</strong> <span class="text-sm">(aumenta cada hora)</span></div>
+          {% endfor %}
+        </div>
+        <div class="alerta-multa-sub">Acércate al centro administrativo para devolver el artículo y pagar la multa cuanto antes.</div>
+      </div>
+    </div>
     {% endif %}
 
     <h2 class="section-title" style="margin-bottom:16px">Insumos disponibles</h2>
